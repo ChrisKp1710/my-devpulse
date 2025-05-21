@@ -29,7 +29,12 @@ export const ServerProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     loadServers().then((data) => {
-      if (data.length > 0) setServers(data);
+      console.log("📂 Servers caricati da JSON:", data);
+      if (data.length > 0) {
+        setServers(data);
+      } else {
+        console.warn("⚠️ Nessun server trovato nel JSON");
+      }
     });
   }, []);
 

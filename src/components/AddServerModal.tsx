@@ -1,11 +1,16 @@
-import { Dialog, DialogTrigger, DialogContent } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
-import { useServer } from "@/context/useServer"; // ✅ usa SOLO questo
+import { useServer } from "@/context/useServer";
 import type { ServerStatus, Server } from "@/context/ServerContext.types";
 import { saveServers } from "@/lib/serverStorage";
+import { toast } from "sonner"; // ✅ notifica visiva
 
 const AddServerModal = () => {
   const {
@@ -14,6 +19,9 @@ const AddServerModal = () => {
     setSelectedServer,
   } = useServer();
 
+  const [open, setOpen] = useState(false); // ✅ controlla apertura modale
+
+  // Campi form
   const [name, setName] = useState("");
   const [ip, setIp] = useState("");
   const [sshPort, setSshPort] = useState(22);
@@ -25,6 +33,16 @@ const AddServerModal = () => {
   const isFormValid =
     name && ip && sshUser && (authMethod === "password" ? password : sshKeyPath);
 
+  const resetFields = () => {
+    setName("");
+    setIp("");
+    setSshPort(22);
+    setSshUser("");
+    setAuthMethod("password");
+    setPassword("");
+    setSshKeyPath("");
+  };
+
   const handleAdd = async () => {
     const newServer: Server = {
       id: Date.now().toString(),
@@ -35,19 +53,26 @@ const AddServerModal = () => {
       authMethod,
       password: authMethod === "password" ? password : "",
       sshKeyPath: authMethod === "key" ? sshKeyPath : "",
-      sshKey: authMethod === "key" ? sshKeyPath : "", // ✅ compatibilità
+      sshKey: authMethod === "key" ? sshKeyPath : "",
       type: "Custom",
       status: "offline" as ServerStatus,
     };
 
     const updated = [...servers, newServer];
+    console.log("🆕 Nuovo server creato:", newServer);
+    console.log("📦 Lista aggiornata:", updated);
     setServers(updated);
     await saveServers(updated);
     setSelectedServer(newServer);
+
+    toast.success("✅ Server aggiunto con successo");
+
+    setOpen(false); // ✅ chiudi modale
+    resetFields();  // ✅ resetta campi
   };
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button className="bg-muted hover:bg-muted/80 text-foreground px-4 py-2 rounded-md transition-colors text-sm ml-auto">
           + Add Server
