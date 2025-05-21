@@ -1,26 +1,26 @@
-
 import React from 'react';
-import type { Server as ServerType } from '../context/ServerContext';
+import type { ServerStatus, Server } from '../context/ServerContext.types';
 import { Server as ServerIcon } from 'lucide-react';
-import { useServer } from '../context/ServerContext';
+import { useServer } from '../context/useServer';
 
 interface ServerCardProps {
-  server: ServerType;
+  server: Server;
 }
 
 const ServerCard: React.FC<ServerCardProps> = ({ server }) => {
   const { setSelectedServer, selectedServer } = useServer();
-  
-  const statusColor = {
+
+  // Tipizzazione esplicita per evitare errore TS7053
+  const statusColor: Record<ServerStatus, string> = {
     online: 'server-status-online',
     offline: 'server-status-offline',
-    standby: 'server-status-standby'
+    standby: 'server-status-standby',
   };
 
   const isSelected = selectedServer?.id === server.id;
 
   return (
-    <div 
+    <div
       className={`bg-card p-4 rounded-lg cursor-pointer server-card ${
         isSelected ? 'ring-2 ring-primary' : ''
       }`}
@@ -33,11 +33,11 @@ const ServerCard: React.FC<ServerCardProps> = ({ server }) => {
         </div>
         <div className={`${statusColor[server.status]} server-status-dot`} />
       </div>
-      
+
       <div className="text-sm text-muted-foreground mb-1">
         IP: {server.ip}
       </div>
-      
+
       <div className="text-sm text-muted-foreground">
         Type: {server.type}
       </div>

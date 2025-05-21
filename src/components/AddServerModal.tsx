@@ -3,11 +3,16 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
-import { useServer } from "@/context/ServerContext";
-import type { ServerStatus } from "@/context/ServerContext";
+import { useServer } from "@/context/useServer"; // ✅ usa SOLO questo
+import type { ServerStatus, Server } from "@/context/ServerContext.types";
+import { saveServers } from "@/lib/serverStorage";
 
 const AddServerModal = () => {
-  const { setSelectedServer } = useServer();
+  const {
+    servers,
+    setServers,
+    setSelectedServer,
+  } = useServer();
 
   const [name, setName] = useState("");
   const [ip, setIp] = useState("");
@@ -17,8 +22,11 @@ const AddServerModal = () => {
   const [password, setPassword] = useState("");
   const [sshKeyPath, setSshKeyPath] = useState("");
 
-  const handleAdd = () => {
-    const newServer = {
+  const isFormValid =
+    name && ip && sshUser && (authMethod === "password" ? password : sshKeyPath);
+
+  const handleAdd = async () => {
+    const newServer: Server = {
       id: Date.now().toString(),
       name,
       ip,
@@ -27,23 +35,21 @@ const AddServerModal = () => {
       authMethod,
       password: authMethod === "password" ? password : "",
       sshKeyPath: authMethod === "key" ? sshKeyPath : "",
-      sshKey: authMethod === "key" ? sshKeyPath : "", // ✅ obbligatoria per tipizzazione
+      sshKey: authMethod === "key" ? sshKeyPath : "", // ✅ compatibilità
       type: "Custom",
       status: "offline" as ServerStatus,
     };
 
+    const updated = [...servers, newServer];
+    setServers(updated);
+    await saveServers(updated);
     setSelectedServer(newServer);
-    // TODO: salva anche in localStorage o array globale
   };
-
-  const isFormValid = name && ip && sshUser && (authMethod === "password" ? password : sshKeyPath);
 
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button
-          className="bg-muted hover:bg-muted/80 text-foreground px-4 py-2 rounded-md transition-colors text-sm ml-auto"
-        >
+        <Button className="bg-muted hover:bg-muted/80 text-foreground px-4 py-2 rounded-md transition-colors text-sm ml-auto">
           + Add Server
         </Button>
       </DialogTrigger>
@@ -52,32 +58,36 @@ const AddServerModal = () => {
         <div className="space-y-2">
           <h2 className="text-lg font-semibold">Aggiungi un nuovo server</h2>
           <p className="text-sm text-muted-foreground">
-            Inserisci i dati per connetterti via SSH. I campi obbligatori sono evidenziati.
+            Inserisci i dati per connetterti via SSH.
           </p>
         </div>
 
         <div className="space-y-3 mt-4">
           <div className="space-y-1">
             <Label htmlFor="name">Nome server</Label>
-            <Input id="name" placeholder="es. Production" value={name} onChange={(e) => setName(e.target.value)} />
+            <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
 
           <div className="space-y-1">
             <Label htmlFor="ip">Indirizzo IP</Label>
-            <Input id="ip" placeholder="es. 192.168.1.100" value={ip} onChange={(e) => setIp(e.target.value)} />
+            <Input id="ip" value={ip} onChange={(e) => setIp(e.target.value)} />
           </div>
 
           <div className="space-y-1">
             <Label htmlFor="user">Utente SSH</Label>
-            <Input id="user" placeholder="es. root" value={sshUser} onChange={(e) => setSshUser(e.target.value)} />
+            <Input id="user" value={sshUser} onChange={(e) => setSshUser(e.target.value)} />
           </div>
 
           <div className="space-y-1">
             <Label htmlFor="port">Porta SSH</Label>
-            <Input id="port" type="number" value={sshPort} onChange={(e) => setSshPort(Number(e.target.value))} />
+            <Input
+              id="port"
+              type="number"
+              value={sshPort}
+              onChange={(e) => setSshPort(Number(e.target.value))}
+            />
           </div>
 
-          {/* Metodo di autenticazione */}
           <div className="space-y-1">
             <Label>Metodo di autenticazione</Label>
             <div className="flex gap-4">
@@ -107,22 +117,27 @@ const AddServerModal = () => {
           {authMethod === "password" && (
             <div className="space-y-1">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
             </div>
           )}
 
           {authMethod === "key" && (
             <div className="space-y-1">
               <Label htmlFor="key">Percorso chiave SSH</Label>
-              <Input id="key" placeholder="es. ~/.ssh/id_rsa" value={sshKeyPath} onChange={(e) => setSshKeyPath(e.target.value)} />
+              <Input
+                id="key"
+                value={sshKeyPath}
+                onChange={(e) => setSshKeyPath(e.target.value)}
+              />
             </div>
           )}
 
-          <Button
-            onClick={handleAdd}
-            className="w-full mt-2"
-            disabled={!isFormValid}
-          >
+          <Button onClick={handleAdd} className="w-full mt-2" disabled={!isFormValid}>
             Connetti
           </Button>
         </div>

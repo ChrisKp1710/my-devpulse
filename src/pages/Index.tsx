@@ -2,7 +2,8 @@ import Navbar from '../components/Navbar';
 import ServerList from '../components/ServerList';
 import ServerSidebar from '../components/ServerSidebar';
 import Terminal from '../components/Terminal';
-import { ServerProvider, useServer } from '../context/ServerContext';
+import { useServer } from '../context/useServer';
+import { ServerProvider } from '../context/ServerContext';
 
 const Layout = () => {
   const { selectedServer } = useServer();

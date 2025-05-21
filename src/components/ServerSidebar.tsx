@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { useServer } from '../context/ServerContext';
+import { useServer } from '../context/useServer';
 import { Power, Play, Terminal, Settings, StopCircle } from 'lucide-react';
 
 const ServerSidebar: React.FC = () => {
