@@ -17,6 +17,7 @@ interface ServerContextType {
   toggleServerStatus: (id: string) => void;
 }
 
+/* eslint-disable react-refresh/only-export-components */
 export const ServerContext = createContext<ServerContextType | undefined>(
   undefined
 );
