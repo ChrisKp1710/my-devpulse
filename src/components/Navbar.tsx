@@ -1,12 +1,11 @@
 import React from 'react';
 
-
 const Navbar: React.FC = () => {
   return (
     <nav className="bg-background border-b border-border px-6 py-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h1 className="text-xl font-bold">ServerAccess</h1>
+        <h1 className="text-xl font-bold text-white">ServerAccess</h1>
         </div>
         
         <div className="flex gap-4">
