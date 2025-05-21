@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Reset globale */
+body, #root {
+  @apply p-0 m-0 w-full min-h-screen;
+}
+
+/* Stili personalizzati dopo le direttive di Tailwind */
+@layer components {
+  /* Logo con hover effect */
+  .logo {
+    @apply h-16 p-4 transition-all duration-300;
+    will-change: filter;
+  }
+  
+  .logo:hover {
+    @apply scale-110;
+    filter: drop-shadow(0 0 2em #646cffaa);
+  }
+  
+  .logo.react:hover {
+    filter: drop-shadow(0 0 2em #61dafbaa);
+  }
+  
+  /* Card riutilizzabile */
+  .card {
+    @apply bg-white p-6 rounded-lg shadow-md w-full max-w-md mx-auto;
+  }
+  
+  /* Stile per i pulsanti */
+  .btn {
+    @apply bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-md transition-colors;
+  }
+  
+  /* Container principale responsivo */
+  .container-fluid {
+    @apply w-full min-h-screen px-4 flex flex-col;
+  }
+  
+  /* Layout a griglia responsivo */
+  .grid-layout {
+    @apply w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4;
+  }
+
+  /* Testo secondario */
+  .text-secondary {
+    @apply text-gray-500;
+  }
+}
+
+/* Animazioni */
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Attiva l'animazione solo se non è richiesta la riduzione del movimento */
+@media (prefers-reduced-motion: no-preference) {
+  .logo.react {
+    animation: logo-spin infinite 20s linear;
+  }
+}
