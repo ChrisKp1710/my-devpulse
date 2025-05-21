@@ -1,63 +1,33 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
+import { Toaster } from "@/components/ui/toaster";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { HashRouter, Routes, Route } from "react-router-dom"; // <-- cambiato da BrowserRouter a HashRouter
+import Index from "./pages/Index";
+import NotFound from "./pages/NotFound";
+import { invoke } from "@tauri-apps/api/core";
 
-function App() {
-  const [count, setCount] = useState(0)
+// Test iniziale per verificare che le API Tauri funzionino
+invoke("greet", { name: "Christian" }).then((res) => {
+  console.log(res);
+});
 
-  return (
-    <div className="container-fluid bg-gray-50">
-      {/* Header */}
-      <header className="w-full max-w-7xl mx-auto px-4 py-8">
-        <div className="flex justify-center space-x-8">
-          <a href="https://vitejs.dev" target="_blank">
-            <img src={viteLogo} className="logo" alt="Vite logo" />
-          </a>
-          <a href="https://react.dev" target="_blank">
-            <img src={reactLogo} className="logo react" alt="React logo" />
-          </a>
-        </div>
-        <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-blue-600 text-center my-6">
-          Vite + React
-        </h1>
-      </header>
+const queryClient = new QueryClient();
 
-      {/* Main Content */}
-      <main className="w-full max-w-7xl mx-auto px-4 flex-grow flex flex-col items-center">
-        <div className="card mb-8">
-          <button
-            onClick={() => setCount((count) => count + 1)}
-            className="btn"
-          >
-            count is {count}
-          </button>
-          <p className="mt-4 text-gray-700">
-            Edit <code className="bg-gray-100 px-2 py-1 rounded font-mono">src/App.tsx</code> and save to test HMR
-          </p>
-        </div>
-        
-        {/* Grid Example */}
-        <div className="w-full mt-8 mb-12">
-          <h2 className="text-2xl font-bold mb-4">Grid Layout Example</h2>
-          <div className="grid-layout">
-            <div className="bg-blue-100 p-4 rounded-lg shadow-sm">Panel 1</div>
-            <div className="bg-green-100 p-4 rounded-lg shadow-sm">Panel 2</div>
-            <div className="bg-yellow-100 p-4 rounded-lg shadow-sm">Panel 3</div>
-            <div className="bg-purple-100 p-4 rounded-lg shadow-sm">Panel 4</div>
-            <div className="bg-red-100 p-4 rounded-lg shadow-sm">Panel 5</div>
-            <div className="bg-pink-100 p-4 rounded-lg shadow-sm">Panel 6</div>
-          </div>
-        </div>
-      </main>
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <Toaster />
+      <Sonner />
+      <HashRouter>
+        <Routes>
+          <Route path="/" element={<Index />} />
+          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </HashRouter>
+    </TooltipProvider>
+  </QueryClientProvider>
+);
 
-      {/* Footer */}
-      <footer className="w-full max-w-7xl mx-auto px-4 py-6 mt-auto">
-        <p className="text-secondary text-center">
-          Click on the Vite and React logos to learn more
-        </p>
-      </footer>
-    </div>
-  )
-}
-
-export default App
+export default App;
