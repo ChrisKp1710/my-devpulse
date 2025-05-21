@@ -1,9 +1,12 @@
 
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 
 export type ServerStatus = 'online' | 'offline' | 'standby';
 
 export interface Server {
+  sshPort: number;
+  sshUser: string;
+  sshKey: string;
   id: string;
   name: string;
   status: ServerStatus;
@@ -24,12 +27,42 @@ const ServerContext = createContext<ServerContextType | undefined>(undefined);
 
 // Sample data
 const initialServers: Server[] = [
-  { id: '1', name: 'Production Server', status: 'online', ip: '192.168.1.100', type: 'Web Server' },
-  { id: '2', name: 'Database Server', status: 'online', ip: '192.168.1.101', type: 'Database' },
-  { id: '3', name: 'Backup Server', status: 'standby', ip: '192.168.1.102', type: 'Backup' },
-  { id: '4', name: 'Development Server', status: 'offline', ip: '192.168.1.103', type: 'Development' },
-  { id: '5', name: 'Testing Server', status: 'online', ip: '192.168.1.104', type: 'Testing' },
-  { id: '6', name: 'Staging Server', status: 'standby', ip: '192.168.1.105', type: 'Staging' },
+  {
+    id: '1', name: 'Production Server', status: 'online', ip: '192.168.1.100', type: 'Web Server',
+    sshPort: 0,
+    sshUser: '',
+    sshKey: ''
+  },
+  {
+    id: '2', name: 'Database Server', status: 'online', ip: '192.168.1.101', type: 'Database',
+    sshPort: 0,
+    sshUser: '',
+    sshKey: ''
+  },
+  {
+    id: '3', name: 'Backup Server', status: 'standby', ip: '192.168.1.102', type: 'Backup',
+    sshPort: 0,
+    sshUser: '',
+    sshKey: ''
+  },
+  {
+    id: '4', name: 'Development Server', status: 'offline', ip: '192.168.1.103', type: 'Development',
+    sshPort: 0,
+    sshUser: '',
+    sshKey: ''
+  },
+  {
+    id: '5', name: 'Testing Server', status: 'online', ip: '192.168.1.104', type: 'Testing',
+    sshPort: 0,
+    sshUser: '',
+    sshKey: ''
+  },
+  {
+    id: '6', name: 'Staging Server', status: 'standby', ip: '192.168.1.105', type: 'Staging',
+    sshPort: 0,
+    sshUser: '',
+    sshKey: ''
+  },
 ];
 
 export const ServerProvider = ({ children }: { children: ReactNode }) => {
