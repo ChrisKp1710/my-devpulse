@@ -13,7 +13,9 @@ const AddServerModal = () => {
   const [ip, setIp] = useState("");
   const [sshPort, setSshPort] = useState(22);
   const [sshUser, setSshUser] = useState("");
-  const [sshKey, setSshKey] = useState("");
+  const [authMethod, setAuthMethod] = useState<"password" | "key">("password");
+  const [password, setPassword] = useState("");
+  const [sshKeyPath, setSshKeyPath] = useState("");
 
   const handleAdd = () => {
     const newServer = {
@@ -22,14 +24,19 @@ const AddServerModal = () => {
       ip,
       sshPort,
       sshUser,
-      sshKey,
+      authMethod,
+      password: authMethod === "password" ? password : "",
+      sshKeyPath: authMethod === "key" ? sshKeyPath : "",
+      sshKey: authMethod === "key" ? sshKeyPath : "", // ✅ obbligatoria per tipizzazione
       type: "Custom",
       status: "offline" as ServerStatus,
     };
 
     setSelectedServer(newServer);
-    // TODO: addServer(newServer)
+    // TODO: salva anche in localStorage o array globale
   };
+
+  const isFormValid = name && ip && sshUser && (authMethod === "password" ? password : sshKeyPath);
 
   return (
     <Dialog>
@@ -70,12 +77,52 @@ const AddServerModal = () => {
             <Input id="port" type="number" value={sshPort} onChange={(e) => setSshPort(Number(e.target.value))} />
           </div>
 
+          {/* Metodo di autenticazione */}
           <div className="space-y-1">
-            <Label htmlFor="key">Percorso chiave SSH</Label>
-            <Input id="key" placeholder="es. ~/.ssh/id_rsa" value={sshKey} onChange={(e) => setSshKey(e.target.value)} />
+            <Label>Metodo di autenticazione</Label>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="auth"
+                  value="password"
+                  checked={authMethod === "password"}
+                  onChange={() => setAuthMethod("password")}
+                />
+                Password
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="auth"
+                  value="key"
+                  checked={authMethod === "key"}
+                  onChange={() => setAuthMethod("key")}
+                />
+                Chiave SSH
+              </label>
+            </div>
           </div>
 
-          <Button onClick={handleAdd} className="w-full mt-2">
+          {authMethod === "password" && (
+            <div className="space-y-1">
+              <Label htmlFor="password">Password</Label>
+              <Input id="password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
+            </div>
+          )}
+
+          {authMethod === "key" && (
+            <div className="space-y-1">
+              <Label htmlFor="key">Percorso chiave SSH</Label>
+              <Input id="key" placeholder="es. ~/.ssh/id_rsa" value={sshKeyPath} onChange={(e) => setSshKeyPath(e.target.value)} />
+            </div>
+          )}
+
+          <Button
+            onClick={handleAdd}
+            className="w-full mt-2"
+            disabled={!isFormValid}
+          >
             Connetti
           </Button>
         </div>
