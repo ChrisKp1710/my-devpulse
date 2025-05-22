@@ -14,12 +14,16 @@ const TerminalComponent: React.FC = () => {
   const [isTerminalReady, setIsTerminalReady] = useState(false);
   const { selectedServer, sshSessionId, toggleTerminal } = useServer();
 
+  // Stato per salvare il vero hostname del server
+  const [realHostname, setRealHostname] = useState<string | null>(null);
+
   // Funzione per mostrare il prompt
   const showPrompt = useCallback((terminal: Terminal) => {
     const user = selectedServer?.sshUser || "user";
-    const host = selectedServer?.name || "server";
+    // ✅ Usa il vero hostname se disponibile, altrimenti il nome configurato
+    const host = realHostname || selectedServer?.name || "server";
     terminal.write(`\r\n\x1b[32m${user}@${host}\x1b[0m:\x1b[34m${currentPath}\x1b[0m$ `);
-  }, [selectedServer?.sshUser, selectedServer?.name, currentPath]);
+  }, [selectedServer?.sshUser, selectedServer?.name, currentPath, realHostname]);
 
   // Funzione per inizializzare il terminale in modo sicuro
   const initializeTerminal = useCallback(async () => {
@@ -113,15 +117,40 @@ const TerminalComponent: React.FC = () => {
       terminalInstance.writeln(`🔑 Sessione: ${sshSessionId}`);
       terminalInstance.writeln("\r\n🚀 Terminale pronto per i comandi SSH!");
 
-      // Test di connessione automatico con whoami
+      // Test di connessione e recupero info server
       try {
         const whoamiResult = await invoke<string>("execute_ssh_command", {
           sessionId: sshSessionId,
           command: "whoami"
         });
         terminalInstance.writeln(`👤 Utente connesso: ${whoamiResult.trim()}`);
+
+        // ✅ Recupera il vero hostname del server
+        const hostnameResult = await invoke<string>("execute_ssh_command", {
+          sessionId: sshSessionId,
+          command: "hostname"
+        });
+        const serverHostname = hostnameResult.trim();
+        
+        // Aggiorna il nome del server per il prompt
+        if (serverHostname && serverHostname !== selectedServer.name) {
+          terminalInstance.writeln(`🏠 Hostname server: ${serverHostname}`);
+          // ✅ Salva il vero hostname nello stato
+          setRealHostname(serverHostname);
+        }
+
+        // ✅ Configura alias utili (come ll)
+        try {
+          await invoke<string>("execute_ssh_command", {
+            sessionId: sshSessionId,
+            command: "alias ll='ls -la'"
+          });
+          terminalInstance.writeln(`🔧 Alias configurati: ll='ls -la'`);
+        } catch (error) {
+          console.warn("⚠️ Errore configurazione alias:", error);
+        }
       } catch (error) {
-        console.warn("⚠️ Test whoami fallito:", error);
+        console.warn("⚠️ Test connessione fallito:", error);
       }
 
       showPrompt(terminalInstance);
@@ -240,6 +269,7 @@ const TerminalComponent: React.FC = () => {
       setTerm(null);
     }
     setIsTerminalReady(false);
+    setRealHostname(null); // ✅ Reset hostname quando chiudiamo
     toggleTerminal();
   };
 
