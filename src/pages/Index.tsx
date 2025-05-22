@@ -6,7 +6,7 @@ import { useServer } from '../context/useServer';
 import { ServerProvider } from '../context/ServerContext';
 
 const Layout = () => {
-  const { selectedServer } = useServer();
+  const { terminalVisible } = useServer();
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -19,16 +19,8 @@ const Layout = () => {
         <ServerSidebar />
       </div>
 
-      {selectedServer && selectedServer.ip && (
-        <Terminal
-          server={{
-            ...selectedServer,
-            sshPort: selectedServer.sshPort || 22,
-            sshUser: selectedServer.sshUser || "default",
-            sshKey: selectedServer.sshKey || "",
-          }}
-        />
-      )}
+      {/* Il terminale appare solo quando terminalVisible è true */}
+      {terminalVisible && <Terminal />}
     </div>
   );
 };
