@@ -1,34 +1,45 @@
-import Navbar from '../components/Navbar';
-import ServerList from '../components/ServerList';
-import ServerSidebar from '../components/ServerSidebar';
-import Terminal from '../components/Terminal';
-import { useServer } from '../context/useServer';
-import { ServerProvider } from '../context/ServerContext';
+// index.tsx
+import Navbar from '../components/Navbar'
+import ServerList from '../components/ServerList'
+import ServerSidebar from '../components/ServerSidebar'
+import Terminal from '../components/Terminal'
+import { useServer } from '../context/useServer'
+import { ServerProvider } from '../context/ServerContext'
+import ServerActions from '../components/ServerActions'
 
 const Layout = () => {
-  const { terminalVisible } = useServer();
+  const { terminalVisible, selectedServer } = useServer()
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col relative">
       <Navbar />
 
-      <div className="flex flex-1 overflow-hidden">
-        <div className="flex-1 overflow-auto">
+      <div className="flex-1 relative px-6 py-4">
+        {/* Bottoni azione server in alto a destra */}
+        <ServerActions />
+
+        {/* Lista server con padding solo se sidebar attiva */}
+        <div
+          className={`transition-all duration-300 ${
+            selectedServer ? 'pr-[350px]' : 'pr-0'
+          }`}
+        >
           <ServerList />
         </div>
-        <ServerSidebar />
+
+        {/* Sidebar flottante */}
+        {selectedServer && <ServerSidebar />}
       </div>
 
-      {/* Il terminale appare solo quando terminalVisible è true */}
       {terminalVisible && <Terminal />}
     </div>
-  );
-};
+  )
+}
 
 const Index = () => (
   <ServerProvider>
     <Layout />
   </ServerProvider>
-);
+)
 
-export default Index;
+export default Index

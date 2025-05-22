@@ -45,56 +45,53 @@ const ServerSidebar: React.FC = () => {
   };
 
   return (
-    <div className="bg-card w-64 border-l border-border h-full p-4 flex flex-col justify-between">
-      <div>
-        <h3 className="text-lg font-medium mb-4">{selectedServer.name}</h3>
+    <div className="fixed top-1/2 right-6 -translate-y-1/2 w-80 bg-card shadow-xl border border-border rounded-2xl p-4 z-50">
+      <h3 className="text-lg font-medium mb-4">{selectedServer.name}</h3>
 
-        <div className="text-sm text-muted-foreground mb-4">
-          <div>Status: <span className="text-foreground">{selectedServer.status}</span></div>
-          <div>IP: <span className="text-foreground">{selectedServer.ip}</span></div>
-          <div>Type: <span className="text-foreground">{selectedServer.type}</span></div>
-          <div>User: <span className="text-foreground">{selectedServer.sshUser}</span></div>
-          <div>Port: <span className="text-foreground">{selectedServer.sshPort}</span></div>
-        </div>
-
-        <div className="border-t border-border my-2" />
-        <h4 className="text-sm font-medium mb-2">Commands</h4>
-
-        <button className="sidebar-command" onClick={handleStatusToggle}>
-          {selectedServer.status === 'online' ? (
-            <>
-              <StopCircle className="h-4 w-4" />
-              <span>Shutdown Server</span>
-            </>
-          ) : (
-            <>
-              <Play className="h-4 w-4" />
-              <span>Start Server</span>
-            </>
-          )}
-        </button>
-
-        <button className="sidebar-command">
-          <Power className="h-4 w-4" />
-          <span>Wake On LAN</span>
-        </button>
-
-        <button
-          className="sidebar-command bg-primary text-primary-foreground hover:bg-primary/90 mt-4"
-          onClick={handleOpenTerminal}
-          disabled={isConnecting}
-        >
-          <Terminal className="h-4 w-4" />
-          <span>{isConnecting ? 'Connecting...' : 'Open Terminal'}</span>
-        </button>
-
-        <button className="sidebar-command mt-4">
-          <Settings className="h-4 w-4" />
-          <span>Server Settings</span>
-        </button>
+      <div className="text-sm text-muted-foreground mb-4">
+        <div>Status: <span className="text-foreground">{selectedServer.status}</span></div>
+        <div>IP: <span className="text-foreground">{selectedServer.ip}</span></div>
+        <div>Type: <span className="text-foreground">{selectedServer.type}</span></div>
+        <div>User: <span className="text-foreground">{selectedServer.sshUser}</span></div>
+        <div>Port: <span className="text-foreground">{selectedServer.sshPort}</span></div>
       </div>
 
-      {/* 🔴 Bottone Elimina Server */}
+      <div className="border-t border-border my-2" />
+      <h4 className="text-sm font-medium mb-2">Commands</h4>
+
+      <button className="sidebar-command" onClick={handleStatusToggle}>
+        {selectedServer.status === 'online' ? (
+          <>
+            <StopCircle className="h-4 w-4" />
+            <span>Shutdown Server</span>
+          </>
+        ) : (
+          <>
+            <Play className="h-4 w-4" />
+            <span>Start Server</span>
+          </>
+        )}
+      </button>
+
+      <button className="sidebar-command">
+        <Power className="h-4 w-4" />
+        <span>Wake On LAN</span>
+      </button>
+
+      <button
+        className="sidebar-command bg-primary text-primary-foreground hover:bg-primary/90 mt-4"
+        onClick={handleOpenTerminal}
+        disabled={isConnecting}
+      >
+        <Terminal className="h-4 w-4" />
+        <span>{isConnecting ? 'Connecting...' : 'Open Terminal'}</span>
+      </button>
+
+      <button className="sidebar-command mt-4">
+        <Settings className="h-4 w-4" />
+        <span>Server Settings</span>
+      </button>
+
       <Dialog>
         <DialogTrigger asChild>
           <Button
