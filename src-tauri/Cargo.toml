@@ -1,8 +1,8 @@
 [package]
-name = "app"
+name = "my-devpulse"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "connetti al tuo server ovnque con facilita"
+authors = ["Christian Koscielniak Pinto"]
 license = ""
 repository = ""
 edition = "2021"
@@ -22,3 +22,6 @@ tauri-plugin-fs = "2.3.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 log = "0.4"
+# ✅ Dipendenze SSH
+ssh2 = "0.9"
+tokio = { version = "1.0", features = ["full"] }

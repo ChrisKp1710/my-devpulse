@@ -36,7 +36,6 @@ export const ServerProvider = ({ children }: { children: ReactNode }) => {
     
     const loadServersFromTauri = async () => {
       try {
-        // Carica i server usando la funzione di storage
         const data = await loadServers();
         console.log("📂 Servers caricati:", data);
         
@@ -54,38 +53,44 @@ export const ServerProvider = ({ children }: { children: ReactNode }) => {
     loadServersFromTauri();
   }, []);
 
-  const toggleTerminal = () => {
+  const toggleTerminal = async () => {
     setTerminalVisible((prev) => !prev);
-    // Se chiudiamo il terminale, chiudiamo anche la sessione SSH
+    
+    // ✅ Se chiudiamo il terminale, chiudiamo anche la sessione SSH
     if (terminalVisible && sshSessionId) {
+      try {
+        await invoke("close_ssh_session", { sessionId: sshSessionId });
+        console.log("🔌 Sessione SSH chiusa:", sshSessionId);
+      } catch (error) {
+        console.error("❌ Errore chiusura sessione SSH:", error);
+      }
       setSshSessionId(null);
-      console.log("🔌 Sessione SSH chiusa");
     }
   };
 
   const startSshConnection = async (server: Server) => {
     try {
-      console.log("🔐 Avvio connessione SSH a:", server.name);
+      console.log("🔐 Avvio connessione SSH REALE a:", server.name);
       
-      // ✅ Usa camelCase - il backend dovrebbe gestirlo con serde
       const connectionRequest = {
         host: server.ip,
         port: server.sshPort,
         username: server.sshUser,
-        authMethod: server.authMethod, // ← camelCase
+        authMethod: server.authMethod,
         password: server.password || null,
-        keyPath: server.sshKeyPath || null, // ← camelCase
+        keyPath: server.sshKeyPath || null,
       };
 
       console.log("📤 Invio richiesta connessione:", connectionRequest);
 
+      // ✅ Ora la connessione SSH è reale!
       const sessionId = await invoke<string>("start_ssh_session", { 
         connection: connectionRequest 
       });
       
       setSshSessionId(sessionId);
       setTerminalVisible(true);
-      console.log("✅ Connessione SSH stabilita:", sessionId);
+      console.log("✅ Connessione SSH REALE stabilita:", sessionId);
     } catch (error) {
       console.error("❌ Errore connessione SSH:", error);
       throw error;

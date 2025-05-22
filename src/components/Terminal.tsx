@@ -11,6 +11,7 @@ const TerminalComponent: React.FC = () => {
   const [term, setTerm] = useState<Terminal | null>(null);
   const [fitAddon, setFitAddon] = useState<FitAddon | null>(null);
   const [currentPath, setCurrentPath] = useState<string>("~");
+  const [isReady, setIsReady] = useState(false); // ✅ Stato per controllare quando il DOM è pronto
   const { selectedServer, sshSessionId, toggleTerminal } = useServer();
 
   // Funzione per mostrare il prompt (memoizzata con useCallback)
@@ -20,131 +21,164 @@ const TerminalComponent: React.FC = () => {
     terminal.write(`\r\n\x1b[32m${user}@${host}\x1b[0m:\x1b[34m${currentPath}\x1b[0m$ `);
   }, [selectedServer?.sshUser, selectedServer?.name, currentPath]);
 
+  // ✅ Aspetta che il DOM sia pronto prima di inizializzare il terminale
   useEffect(() => {
-    if (!selectedServer || !sshSessionId || !terminalRef.current || term) return;
+    if (terminalRef.current) {
+      // Aggiungi un piccolo delay per assicurarsi che il DOM sia completamente renderizzato
+      const timer = setTimeout(() => {
+        setIsReady(true);
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  useEffect(() => {
+    // ✅ Inizializza solo quando tutto è pronto
+    if (!selectedServer || !sshSessionId || !terminalRef.current || term || !isReady) return;
 
     console.log("🖥️ Inizializzazione terminale per:", selectedServer.name);
 
-    // Crea il terminale
-    const terminalInstance = new Terminal({
-      fontFamily: '"Cascadia Code", "Fira Code", "Monaco", monospace',
-      fontSize: 14,
-      cursorBlink: true,
-      cursorStyle: "block",
-      theme: {
-        background: "#0a0a0a",
-        foreground: "#ffffff",
-        cursor: "#ffffff",
-        selectionBackground: "#3b82f6", // Cambiato da 'selection' a 'selectionBackground'
-        black: "#000000",
-        red: "#ff5555",
-        green: "#50fa7b",
-        yellow: "#f1fa8c",
-        blue: "#bd93f9",
-        magenta: "#ff79c6",
-        cyan: "#8be9fd",
-        white: "#bfbfbf",
-        brightBlack: "#4d4d4d",
-        brightRed: "#ff6e67",
-        brightGreen: "#5af78e",
-        brightYellow: "#f4f99d",
-        brightBlue: "#caa9fa",
-        brightMagenta: "#ff92d0",
-        brightCyan: "#9aedfe",
-        brightWhite: "#e6e6e6"
-      },
-      rows: 24,
-      cols: 80,
-    });
+    try {
+      // Crea il terminale
+      const terminalInstance = new Terminal({
+        fontFamily: '"Cascadia Code", "Fira Code", "Monaco", monospace',
+        fontSize: 14,
+        cursorBlink: true,
+        cursorStyle: "block",
+        theme: {
+          background: "#0a0a0a",
+          foreground: "#ffffff",
+          cursor: "#ffffff",
+          selectionBackground: "#3b82f6",
+          black: "#000000",
+          red: "#ff5555",
+          green: "#50fa7b",
+          yellow: "#f1fa8c",
+          blue: "#bd93f9",
+          magenta: "#ff79c6",
+          cyan: "#8be9fd",
+          white: "#bfbfbf",
+          brightBlack: "#4d4d4d",
+          brightRed: "#ff6e67",
+          brightGreen: "#5af78e",
+          brightYellow: "#f4f99d",
+          brightBlue: "#caa9fa",
+          brightMagenta: "#ff92d0",
+          brightCyan: "#9aedfe",
+          brightWhite: "#e6e6e6"
+        },
+        rows: 24,
+        cols: 80,
+      });
 
-    // Addon per il fit
-    const fitAddonInstance = new FitAddon();
-    terminalInstance.loadAddon(fitAddonInstance);
+      // Addon per il fit
+      const fitAddonInstance = new FitAddon();
+      terminalInstance.loadAddon(fitAddonInstance);
 
-    // Apri il terminale
-    terminalInstance.open(terminalRef.current);
-    fitAddonInstance.fit();
+      // Apri il terminale
+      terminalInstance.open(terminalRef.current);
+      
+      // ✅ Aspetta un frame prima di fare il fit
+      setTimeout(() => {
+        try {
+          fitAddonInstance.fit();
+          console.log("✅ Terminale dimensionato correttamente");
+        } catch (error) {
+          console.warn("⚠️ Errore durante il fit del terminale:", error);
+        }
+      }, 50);
 
-    setTerm(terminalInstance);
-    setFitAddon(fitAddonInstance);
+      setTerm(terminalInstance);
+      setFitAddon(fitAddonInstance);
 
-    // Messaggio di benvenuto
-    terminalInstance.writeln(`\r\n🔗 Connesso a ${selectedServer.name} (${selectedServer.ip})`);
-    terminalInstance.writeln(`📡 Sessione SSH: ${sshSessionId}`);
-    terminalInstance.writeln(`\r\n✨ Benvenuto nel terminale interattivo!`);
-    showPrompt(terminalInstance);
+      // Messaggio di benvenuto
+      terminalInstance.writeln(`\r\n🔗 Connesso a ${selectedServer.name} (${selectedServer.ip})`);
+      terminalInstance.writeln(`📡 Sessione SSH: ${sshSessionId}`);
+      terminalInstance.writeln(`\r\n✨ Benvenuto nel terminale interattivo!`);
+      showPrompt(terminalInstance);
 
-    let currentCommand = "";
+      let currentCommand = "";
 
-    // Gestione input
-    terminalInstance.onData(async (data) => {
-      const code = data.charCodeAt(0);
+      // Gestione input
+      const handleData = async (data: string) => {
+        const code = data.charCodeAt(0);
 
-      if (code === 13) { // Enter
-        terminalInstance.write("\r\n");
-        
-        if (currentCommand.trim()) {
-          try {
-            const result = await invoke<string>("execute_ssh_command", {
-              sessionId: sshSessionId,
-              command: currentCommand.trim()
-            });
-            
-            terminalInstance.writeln(result);
-            
-            // Aggiorna il path se è un comando cd
-            if (currentCommand.trim().startsWith("cd ")) {
-              // Simuliamo il cambio directory
-              const newPath = currentCommand.trim().substring(3).trim();
-              if (newPath === "..") {
-                setCurrentPath(prev => {
-                  const parts = prev.split("/");
-                  parts.pop();
-                  return parts.join("/") || "/";
-                });
-              } else if (newPath.startsWith("/")) {
-                setCurrentPath(newPath);
-              } else {
-                setCurrentPath(prev => `${prev}/${newPath}`);
+        if (code === 13) { // Enter
+          terminalInstance.write("\r\n");
+          
+          if (currentCommand.trim()) {
+            try {
+              const result = await invoke<string>("execute_ssh_command", {
+                sessionId: sshSessionId,
+                command: currentCommand.trim()
+              });
+              
+              terminalInstance.writeln(result);
+              
+              // Aggiorna il path se è un comando cd
+              if (currentCommand.trim().startsWith("cd ")) {
+                const newPath = currentCommand.trim().substring(3).trim();
+                if (newPath === "..") {
+                  setCurrentPath(prev => {
+                    const parts = prev.split("/");
+                    parts.pop();
+                    return parts.join("/") || "/";
+                  });
+                } else if (newPath.startsWith("/")) {
+                  setCurrentPath(newPath);
+                } else {
+                  setCurrentPath(prev => `${prev}/${newPath}`);
+                }
               }
+            } catch (error) {
+              terminalInstance.writeln(`❌ Errore: ${error}`);
             }
-          } catch (error) {
-            terminalInstance.writeln(`❌ Errore: ${error}`);
           }
+          
+          currentCommand = "";
+          showPrompt(terminalInstance);
+        } else if (code === 127) { // Backspace
+          if (currentCommand.length > 0) {
+            currentCommand = currentCommand.slice(0, -1);
+            terminalInstance.write("\b \b");
+          }
+        } else if (code >= 32) { // Caratteri stampabili
+          currentCommand += data;
+          terminalInstance.write(data);
         }
-        
-        currentCommand = "";
-        showPrompt(terminalInstance);
-      } else if (code === 127) { // Backspace
-        if (currentCommand.length > 0) {
-          currentCommand = currentCommand.slice(0, -1);
-          terminalInstance.write("\b \b");
-        }
-      } else if (code >= 32) { // Caratteri stampabili
-        currentCommand += data;
-        terminalInstance.write(data);
-      }
-    });
+      };
 
-    // Cleanup
-    return () => {
-      terminalInstance.dispose();
-    };
-  }, [selectedServer, sshSessionId, term, showPrompt]); // Aggiunto showPrompt alle dipendenze
+      terminalInstance.onData(handleData);
+
+      // Cleanup
+      return () => {
+        console.log("🧹 Pulizia terminale");
+        terminalInstance.dispose();
+      };
+    } catch (error) {
+      console.error("❌ Errore inizializzazione terminale:", error);
+    }
+  }, [selectedServer, sshSessionId, term, isReady, showPrompt]); // ✅ Aggiunto isReady alle dipendenze
 
   // Ridimensiona il terminale quando la finestra cambia
   useEffect(() => {
     const handleResize = () => {
       if (fitAddon && term) {
-        setTimeout(() => fitAddon.fit(), 100);
+        // ✅ Aggiungi protezione con try-catch
+        setTimeout(() => {
+          try {
+            fitAddon.fit();
+          } catch (error) {
+            console.warn("⚠️ Errore durante il resize:", error);
+          }
+        }, 100);
       }
     };
 
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, [fitAddon, term]);
-
-  // Rimuoviamo la funzione showPrompt da qui perché è stata spostata sopra
 
   const handleClose = () => {
     if (term) {
