@@ -1,34 +1,46 @@
 // src/lib/serverStorage.ts
 import type { Server } from "@/context/ServerContext.types";
-import { isTauri } from "@/lib/utils";
+import { invoke } from "@tauri-apps/api/core";
 
-// 💾 Salva i server (solo in Tauri)
-export const saveServers = async (servers: Server[]) => {
-  if (!isTauri()) {
-    console.warn("⚠️ Tauri non rilevato: salvataggio disattivato.");
-    return;
-  }
-
+// 📂 Carica i server da Tauri
+export const loadServers = async (): Promise<Server[]> => {
   try {
-    const { saveServers } = await import("./serverStorage.tauri");
-    return saveServers(servers);
+    const servers = await invoke<Server[]>("load_servers");
+    console.log("📂 Server caricati:", servers);
+    return servers || [];
   } catch (error) {
-    console.error("❌ Errore import dinamico saveServers:", error);
+    console.error("❌ Errore caricamento server:", error);
+    return [];
   }
 };
 
-// 📂 Carica i server (solo in Tauri)
-export const loadServers = async (): Promise<Server[]> => {
-  if (!isTauri()) {
-    console.warn("⚠️ Tauri non rilevato: caricamento disattivato.");
-    return [];
-  }
-
+// 💾 Salva un singolo server
+export const saveServer = async (server: Server): Promise<void> => {
   try {
-    const { loadServers } = await import("./serverStorage.tauri");
-    return await loadServers();
+    const rustServer = {
+      id: server.id,
+      name: server.name,
+      ip: server.ip,
+      sshUser: server.sshUser,
+      sshPort: server.sshPort,
+      authMethod: server.authMethod,
+      password: server.password || null,
+      sshKeyPath: server.sshKeyPath || null,
+      sshKey: server.sshKey,
+      serverType: server.type,
+      status: server.status,
+    };
+
+    await invoke("save_server", { server: rustServer });
+    console.log("✅ Server salvato:", server.name);
   } catch (error) {
-    console.error("❌ Errore import dinamico loadServers:", error);
-    return [];
+    console.error("❌ Errore salvataggio server:", error);
+    throw error;
   }
+};
+
+// Per compatibilità (deprecata)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export const saveServers = async (_servers: Server[]): Promise<void> => {
+  console.warn("⚠️ saveServers è deprecata");
 };

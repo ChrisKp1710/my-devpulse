@@ -3,6 +3,7 @@ import {
   DialogTrigger,
   DialogContent,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -11,10 +12,10 @@ import { useState } from "react";
 import { useServer } from "@/context/useServer";
 import type { ServerStatus, Server } from "@/context/ServerContext.types";
 import { toast } from "sonner";
-import { invoke } from "@tauri-apps/api/core";
+import { saveServer, loadServers } from "@/lib/serverStorage";
 
 const AddServerModal = () => {
-  const { servers, setServers, setSelectedServer } = useServer();
+  const { setServers, setSelectedServer } = useServer();
 
   const [open, setOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -59,29 +60,16 @@ const AddServerModal = () => {
     };
 
     try {
-      // 🔥 Usa direttamente le API Tauri invece del sistema di storage
-      console.log("📤 Invio server a Tauri:", newServer);
+      // 🔥 Usa la funzione di storage semplificata
+      console.log("📤 Salvando server:", newServer);
       
-      // Converti il server nel formato che si aspetta Rust
-      const rustServer = {
-        id: newServer.id,
-        name: newServer.name,
-        ip: newServer.ip,
-        sshUser: newServer.sshUser, // camelCase per JavaScript
-        sshPort: newServer.sshPort,
-        authMethod: newServer.authMethod,
-        password: newServer.password || null,
-        sshKeyPath: newServer.sshKeyPath || null,
-        sshKey: newServer.sshKey,
-        serverType: newServer.type, // "type" è una parola riservata in Rust
-        status: newServer.status,
-      };
-
-      await invoke("save_server", { server: rustServer });
+      await saveServer(newServer);
       
-      // Aggiorna lo stato locale
-      const updated = [...servers, newServer];
-      setServers(updated);
+      // Ricarica tutti i server dal file per essere sicuri della sincronizzazione
+      const updatedServers = await loadServers();
+      setServers(updatedServers);
+      
+      // Seleziona il server appena aggiunto
       setSelectedServer(newServer);
 
       console.log("✅ Server salvato correttamente");
@@ -105,14 +93,10 @@ const AddServerModal = () => {
       </DialogTrigger>
 
       <DialogContent className="sm:max-w-[420px]">
-        <DialogTitle className="sr-only">Aggiungi un nuovo server</DialogTitle>
-
-        <div className="space-y-2">
-          <h2 className="text-lg font-semibold">Aggiungi un nuovo server</h2>
-          <p className="text-sm text-muted-foreground">
-            Inserisci i dati per connetterti via SSH.
-          </p>
-        </div>
+        <DialogTitle>Aggiungi un nuovo server</DialogTitle>
+        <DialogDescription>
+          Inserisci i dati per connetterti via SSH al tuo server.
+        </DialogDescription>
 
         <div className="space-y-3 mt-4">
           <div className="space-y-1">
