@@ -8,6 +8,7 @@ import NotFound from "./pages/NotFound";
 import { invoke } from "@tauri-apps/api/core";
 import { getName } from "@tauri-apps/api/app";
 import { useEffect } from "react";
+import { ThemeProvider } from "next-themes";
 
 const queryClient = new QueryClient();
 
@@ -37,18 +38,20 @@ const TauriInitializer = () => {
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <TauriInitializer />
-      <Toaster />
-      <Sonner />
-      <HashRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </HashRouter>
-    </TooltipProvider>
+    <ThemeProvider attribute="class" defaultTheme="system">
+      <TooltipProvider>
+        <TauriInitializer />
+        <Toaster />
+        <Sonner />
+        <HashRouter>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </HashRouter>
+      </TooltipProvider>
+    </ThemeProvider>
   </QueryClientProvider>
 );
 
