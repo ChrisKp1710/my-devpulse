@@ -21,7 +21,7 @@ const ServerCard: React.FC<ServerCardProps> = ({ server }) => {
 
   return (
     <div
-      className={`bg-card p-4 rounded-lg cursor-pointer server-card ${
+      className={`bg-card p-4 rounded-lg cursor-pointer server-card shadow-sm hover:shadow-md transition-shadow ${
         isSelected ? 'ring-2 ring-primary' : ''
       }`}
       onClick={() => setSelectedServer(server)}

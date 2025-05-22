@@ -27,7 +27,7 @@ const ServerList: React.FC = () => {
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-white">Servers</h2>
+      <h2 className="text-2xl font-bold text-foreground">Servers</h2>
         <div className="flex gap-2">
           <Button
             onClick={handleRefresh}

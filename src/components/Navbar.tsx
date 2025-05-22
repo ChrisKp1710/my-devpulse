@@ -7,7 +7,7 @@ const Navbar: React.FC = () => {
       <div className="flex items-center justify-between">
         {/* Logo / Titolo */}
         <div className="flex items-center gap-2">
-          <h1 className="text-xl font-bold text-foreground">ServerAccess</h1>
+          <h1 className="text-2xl font-bold text-foreground">DevPulse</h1>
         </div>
 
         {/* Menu + Toggle */}
