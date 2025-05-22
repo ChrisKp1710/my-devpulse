@@ -1,5 +1,6 @@
 import React from "react"
 import { ThemeToggle } from "@/components/ThemeToggle"
+import { Button } from "@/components/ui/button"
 
 const Navbar: React.FC = () => {
   return (
@@ -11,16 +12,16 @@ const Navbar: React.FC = () => {
         </div>
 
         {/* Menu + Toggle */}
-        <div className="flex items-center gap-4">
-          <button className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-            Dashboard
-          </button>
-          <button className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-            Servers
-          </button>
-          <button className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-            Settings
-          </button>
+        <div className="flex items-center gap-2">
+          {["Dashboard", "Servers", "Settings"].map((item) => (
+            <Button
+              key={item}
+              variant="ghost"
+              className="text-sm font-normal text-muted-foreground px-3 py-1.5 rounded-md transition-colors hover:bg-[#5b5fc4]/15 hover:text-[#3e3f90] dark:hover:bg-[#5b5fc4]/20 dark:hover:text-[#cdd1ff]"
+            >
+              {item}
+            </Button>
+          ))}
 
           {/* Toggle Tema */}
           <ThemeToggle />
