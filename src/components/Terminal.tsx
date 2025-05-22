@@ -11,45 +11,39 @@ const TerminalComponent: React.FC = () => {
   const [term, setTerm] = useState<Terminal | null>(null);
   const [fitAddon, setFitAddon] = useState<FitAddon | null>(null);
   const [currentPath, setCurrentPath] = useState<string>("~");
-  const [isReady, setIsReady] = useState(false); // ✅ Stato per controllare quando il DOM è pronto
+  const [isTerminalReady, setIsTerminalReady] = useState(false);
   const { selectedServer, sshSessionId, toggleTerminal } = useServer();
 
-  // Funzione per mostrare il prompt (memoizzata con useCallback)
+  // Funzione per mostrare il prompt
   const showPrompt = useCallback((terminal: Terminal) => {
     const user = selectedServer?.sshUser || "user";
     const host = selectedServer?.name || "server";
     terminal.write(`\r\n\x1b[32m${user}@${host}\x1b[0m:\x1b[34m${currentPath}\x1b[0m$ `);
   }, [selectedServer?.sshUser, selectedServer?.name, currentPath]);
 
-  // ✅ Aspetta che il DOM sia pronto prima di inizializzare il terminale
-  useEffect(() => {
-    if (terminalRef.current) {
-      // Aggiungi un piccolo delay per assicurarsi che il DOM sia completamente renderizzato
-      const timer = setTimeout(() => {
-        setIsReady(true);
-      }, 100);
-      
-      return () => clearTimeout(timer);
+  // Funzione per inizializzare il terminale in modo sicuro
+  const initializeTerminal = useCallback(async () => {
+    if (!selectedServer || !sshSessionId || !terminalRef.current || term) {
+      return;
     }
-  }, []);
 
-  useEffect(() => {
-    // ✅ Inizializza solo quando tutto è pronto
-    if (!selectedServer || !sshSessionId || !terminalRef.current || term || !isReady) return;
-
-    console.log("🖥️ Inizializzazione terminale per:", selectedServer.name);
+    console.log("🖥️ Inizializzazione terminale sicura per:", selectedServer.name);
 
     try {
-      // Crea il terminale
+      // Crea il terminale con configurazione più conservativa
       const terminalInstance = new Terminal({
-        fontFamily: '"Cascadia Code", "Fira Code", "Monaco", monospace',
-        fontSize: 14,
+        fontFamily: '"Monaco", "Menlo", "Ubuntu Mono", monospace',
+        fontSize: 13,
+        lineHeight: 1.2,
         cursorBlink: true,
         cursorStyle: "block",
+        convertEol: true,
+        disableStdin: false,
         theme: {
-          background: "#0a0a0a",
+          background: "#1a1a1a",
           foreground: "#ffffff",
           cursor: "#ffffff",
+          cursorAccent: "#000000",
           selectionBackground: "#3b82f6",
           black: "#000000",
           red: "#ff5555",
@@ -68,39 +62,73 @@ const TerminalComponent: React.FC = () => {
           brightCyan: "#9aedfe",
           brightWhite: "#e6e6e6"
         },
-        rows: 24,
-        cols: 80,
+        rows: 30,
+        cols: 120,
       });
 
       // Addon per il fit
       const fitAddonInstance = new FitAddon();
       terminalInstance.loadAddon(fitAddonInstance);
 
-      // Apri il terminale
-      terminalInstance.open(terminalRef.current);
+      console.log("🔧 Apertura terminale...");
       
-      // ✅ Aspetta un frame prima di fare il fit
-      setTimeout(() => {
+      // Apri il terminale nel DOM
+      terminalInstance.open(terminalRef.current);
+
+      // Aspetta che il terminale sia completamente renderizzato
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      console.log("📐 Tentativo fit terminale...");
+      
+      // Try-catch per il fit con retry
+      let fitAttempts = 0;
+      const maxFitAttempts = 5;
+      
+      const attemptFit = () => {
         try {
           fitAddonInstance.fit();
           console.log("✅ Terminale dimensionato correttamente");
+          setIsTerminalReady(true);
         } catch (error) {
-          console.warn("⚠️ Errore durante il fit del terminale:", error);
+          fitAttempts++;
+          console.warn(`⚠️ Tentativo fit ${fitAttempts} fallito:`, error);
+          
+          if (fitAttempts < maxFitAttempts) {
+            setTimeout(attemptFit, 100 * fitAttempts); // Backoff incrementale
+          } else {
+            console.warn("⚠️ Fit fallito dopo", maxFitAttempts, "tentativi. Continuo senza fit.");
+            setIsTerminalReady(true);
+          }
         }
-      }, 50);
+      };
+
+      attemptFit();
 
       setTerm(terminalInstance);
       setFitAddon(fitAddonInstance);
 
       // Messaggio di benvenuto
-      terminalInstance.writeln(`\r\n🔗 Connesso a ${selectedServer.name} (${selectedServer.ip})`);
-      terminalInstance.writeln(`📡 Sessione SSH: ${sshSessionId}`);
-      terminalInstance.writeln(`\r\n✨ Benvenuto nel terminale interattivo!`);
+      terminalInstance.writeln("\r\n🔗 Connessione SSH REALE stabilita!");
+      terminalInstance.writeln(`📡 Server: ${selectedServer.name} (${selectedServer.ip})`);
+      terminalInstance.writeln(`🔑 Sessione: ${sshSessionId}`);
+      terminalInstance.writeln("\r\n🚀 Terminale pronto per i comandi SSH!");
+
+      // Test di connessione automatico con whoami
+      try {
+        const whoamiResult = await invoke<string>("execute_ssh_command", {
+          sessionId: sshSessionId,
+          command: "whoami"
+        });
+        terminalInstance.writeln(`👤 Utente connesso: ${whoamiResult.trim()}`);
+      } catch (error) {
+        console.warn("⚠️ Test whoami fallito:", error);
+      }
+
       showPrompt(terminalInstance);
 
       let currentCommand = "";
 
-      // Gestione input
+      // Gestione input migliorata
       const handleData = async (data: string) => {
         const code = data.charCodeAt(0);
 
@@ -108,31 +136,33 @@ const TerminalComponent: React.FC = () => {
           terminalInstance.write("\r\n");
           
           if (currentCommand.trim()) {
+            const command = currentCommand.trim();
+            terminalInstance.writeln(`> Esecuzione: ${command}`);
+            
             try {
               const result = await invoke<string>("execute_ssh_command", {
                 sessionId: sshSessionId,
-                command: currentCommand.trim()
+                command: command
               });
               
-              terminalInstance.writeln(result);
+              if (result.trim()) {
+                terminalInstance.writeln(result);
+              }
               
-              // Aggiorna il path se è un comando cd
-              if (currentCommand.trim().startsWith("cd ")) {
-                const newPath = currentCommand.trim().substring(3).trim();
-                if (newPath === "..") {
-                  setCurrentPath(prev => {
-                    const parts = prev.split("/");
-                    parts.pop();
-                    return parts.join("/") || "/";
+              // Gestione cambio directory
+              if (command.startsWith("cd ")) {
+                try {
+                  const pwdResult = await invoke<string>("execute_ssh_command", {
+                    sessionId: sshSessionId,
+                    command: "pwd"
                   });
-                } else if (newPath.startsWith("/")) {
-                  setCurrentPath(newPath);
-                } else {
-                  setCurrentPath(prev => `${prev}/${newPath}`);
+                  setCurrentPath(pwdResult.trim());
+                } catch (error) {
+                  console.warn("⚠️ Errore aggiornamento path:", error);
                 }
               }
             } catch (error) {
-              terminalInstance.writeln(`❌ Errore: ${error}`);
+              terminalInstance.writeln(`\x1b[31m❌ Errore: ${error}\x1b[0m`);
             }
           }
           
@@ -143,6 +173,10 @@ const TerminalComponent: React.FC = () => {
             currentCommand = currentCommand.slice(0, -1);
             terminalInstance.write("\b \b");
           }
+        } else if (code === 3) { // Ctrl+C
+          terminalInstance.writeln("\r\n^C");
+          currentCommand = "";
+          showPrompt(terminalInstance);
         } else if (code >= 32) { // Caratteri stampabili
           currentCommand += data;
           terminalInstance.write(data);
@@ -151,45 +185,65 @@ const TerminalComponent: React.FC = () => {
 
       terminalInstance.onData(handleData);
 
-      // Cleanup
+      // Cleanup function
       return () => {
         console.log("🧹 Pulizia terminale");
-        terminalInstance.dispose();
+        try {
+          terminalInstance.dispose();
+        } catch (error) {
+          console.warn("⚠️ Errore durante dispose:", error);
+        }
       };
-    } catch (error) {
-      console.error("❌ Errore inizializzazione terminale:", error);
-    }
-  }, [selectedServer, sshSessionId, term, isReady, showPrompt]); // ✅ Aggiunto isReady alle dipendenze
 
-  // Ridimensiona il terminale quando la finestra cambia
+    } catch (error) {
+      console.error("❌ Errore critico inizializzazione terminale:", error);
+    }
+  }, [selectedServer, sshSessionId, term, showPrompt]);
+
+  // Effect per inizializzare il terminale
+  useEffect(() => {
+    if (selectedServer && sshSessionId && terminalRef.current && !term) {
+      // Delay per assicurarsi che il DOM sia pronto
+      const timer = setTimeout(() => {
+        initializeTerminal();
+      }, 100);
+
+      return () => clearTimeout(timer);
+    }
+  }, [selectedServer, sshSessionId, term, initializeTerminal]);
+
+  // Gestione resize con protezione
   useEffect(() => {
     const handleResize = () => {
-      if (fitAddon && term) {
-        // ✅ Aggiungi protezione con try-catch
-        setTimeout(() => {
-          try {
+      if (fitAddon && term && isTerminalReady) {
+        try {
+          setTimeout(() => {
             fitAddon.fit();
-          } catch (error) {
-            console.warn("⚠️ Errore durante il resize:", error);
-          }
-        }, 100);
+          }, 50);
+        } catch (error) {
+          console.warn("⚠️ Errore durante resize:", error);
+        }
       }
     };
 
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, [fitAddon, term]);
+  }, [fitAddon, term, isTerminalReady]);
 
-  const handleClose = () => {
+  const handleClose = async () => {
     if (term) {
-      term.dispose();
+      try {
+        term.dispose();
+      } catch (error) {
+        console.warn("⚠️ Errore chiusura terminale:", error);
+      }
       setTerm(null);
     }
+    setIsTerminalReady(false);
     toggleTerminal();
   };
 
   const handleMinimize = () => {
-    // Per ora solo chiudiamo, in futuro possiamo implementare minimize
     handleClose();
   };
 
@@ -198,28 +252,31 @@ const TerminalComponent: React.FC = () => {
   }
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-black border-t border-gray-700 z-50">
+    <div className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-600 z-50 shadow-2xl">
       {/* Header del terminale */}
-      <div className="flex items-center justify-between bg-gray-800 px-4 py-2 text-white text-sm">
+      <div className="flex items-center justify-between bg-gray-800 px-4 py-2 text-white text-sm border-b border-gray-600">
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 bg-red-500 rounded-full"></div>
           <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
           <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-          <span className="ml-4">
+          <span className="ml-4 font-mono">
             Terminal - {selectedServer.name} ({selectedServer.ip})
           </span>
+          {isTerminalReady && (
+            <span className="ml-2 text-green-400 text-xs">● CONNESSO</span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={handleMinimize}
-            className="p-1 hover:bg-gray-700 rounded"
+            className="p-1 hover:bg-gray-700 rounded transition-colors"
             title="Minimize"
           >
             <Minimize2 className="h-4 w-4" />
           </button>
           <button
             onClick={handleClose}
-            className="p-1 hover:bg-gray-700 rounded"
+            className="p-1 hover:bg-gray-700 rounded transition-colors"
             title="Close"
           >
             <X className="h-4 w-4" />
@@ -227,15 +284,26 @@ const TerminalComponent: React.FC = () => {
         </div>
       </div>
 
-      {/* Terminale */}
-      <div 
-        ref={terminalRef} 
-        className="h-80 p-2"
-        style={{ 
-          background: "#0a0a0a",
-          fontFamily: '"Cascadia Code", "Fira Code", "Monaco", monospace'
-        }}
-      />
+      {/* Container terminale */}
+      <div className="relative">
+        <div 
+          ref={terminalRef} 
+          className="h-96 p-3"
+          style={{ 
+            background: "#1a1a1a",
+            fontFamily: '"Monaco", "Menlo", "Ubuntu Mono", monospace'
+          }}
+        />
+        
+        {!isTerminalReady && (
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75">
+            <div className="text-white text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
+              <p>Inizializzazione terminale...</p>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
