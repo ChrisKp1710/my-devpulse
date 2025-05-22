@@ -21,13 +21,14 @@ pub struct Server {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")] // ← AGGIUNGI QUESTA RIGA
 pub struct SshConnectionRequest {
     pub host: String,
     pub port: u16,
     pub username: String,
-    pub auth_method: String,
+    pub auth_method: String, // Sarà mappato da authMethod
     pub password: Option<String>,
-    pub key_path: Option<String>,
+    pub key_path: Option<String>, // Sarà mappato da keyPath
 }
 
 #[command]
@@ -40,6 +41,8 @@ async fn start_ssh_session(connection: SshConnectionRequest) -> Result<String, S
     println!("🔐 Avvio sessione SSH verso {}@{}:{}", 
              connection.username, connection.host, connection.port);
     
+    println!("🔑 Metodo autenticazione: {}", connection.auth_method);
+    
     // Per ora restituiamo un messaggio di successo
     // In futuro qui implementeremo la connessione SSH reale
     let session_id = format!("ssh_{}_{}", connection.host, 
@@ -50,7 +53,7 @@ async fn start_ssh_session(connection: SshConnectionRequest) -> Result<String, S
     
     println!("✅ Sessione SSH simulata creata: {}", session_id);
     
-    Ok(session_id) // Restituiamo solo l'ID della sessione
+    Ok(session_id)
 }
 
 #[command]

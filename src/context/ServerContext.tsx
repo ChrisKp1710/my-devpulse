@@ -67,14 +67,17 @@ export const ServerProvider = ({ children }: { children: ReactNode }) => {
     try {
       console.log("🔐 Avvio connessione SSH a:", server.name);
       
+      // ✅ Usa camelCase - il backend dovrebbe gestirlo con serde
       const connectionRequest = {
         host: server.ip,
         port: server.sshPort,
         username: server.sshUser,
-        authMethod: server.authMethod,
+        authMethod: server.authMethod, // ← camelCase
         password: server.password || null,
-        keyPath: server.sshKeyPath || null,
+        keyPath: server.sshKeyPath || null, // ← camelCase
       };
+
+      console.log("📤 Invio richiesta connessione:", connectionRequest);
 
       const sessionId = await invoke<string>("start_ssh_session", { 
         connection: connectionRequest 
