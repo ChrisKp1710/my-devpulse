@@ -5,7 +5,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { Server, ServerStatus } from './ServerContext.types';
-import { saveServers, loadServers } from '@/lib/serverStorage';
+import { invoke } from "@tauri-apps/api/core";
 
 interface ServerContextType {
   servers: Server[];
@@ -28,24 +28,28 @@ export const ServerProvider = ({ children }: { children: ReactNode }) => {
   const [terminalVisible, setTerminalVisible] = useState(false);
 
   useEffect(() => {
-    console.log("🔁 Esecuzione useEffect di caricamento...");
-    loadServers().then((data) => {
-      console.log("📂 Servers caricati da JSON:", data);
-      if (data.length > 0) {
-        setServers(data);
-      } else {
-        console.warn("⚠️ Nessun server trovato nel JSON");
+    console.log("🔁 Caricamento server da Tauri...");
+    
+    const loadServersFromTauri = async () => {
+      try {
+        // Carica i server usando il comando Tauri
+        const data = await invoke<Server[]>("load_servers");
+        console.log("📂 Servers caricati da Tauri:", data);
+        
+        if (data && data.length > 0) {
+          setServers(data);
+        } else {
+          console.warn("⚠️ Nessun server trovato");
+        }
+      } catch (error) {
+        console.error("❌ Errore caricamento server:", error);
+        // In caso di errore, usa un array vuoto
+        setServers([]);
       }
-    });
+    };
+
+    loadServersFromTauri();
   }, []);
-  
-  // Salva ogni modifica ai server
-  useEffect(() => {
-    if (servers.length > 0) {
-      console.log("💾 Server aggiornati, salvo nel file...");
-      saveServers(servers);
-    }
-  }, [servers]);
 
   const toggleTerminal = () => setTerminalVisible((prev) => !prev);
 
@@ -63,7 +67,6 @@ export const ServerProvider = ({ children }: { children: ReactNode }) => {
     });
 
     setServers(updated);
-    saveServers(updated);
 
     if (selectedServer?.id === id) {
       setSelectedServer(updated.find((s) => s.id === id) || null);

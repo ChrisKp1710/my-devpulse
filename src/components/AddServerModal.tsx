@@ -10,8 +10,8 @@ import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import { useServer } from "@/context/useServer";
 import type { ServerStatus, Server } from "@/context/ServerContext.types";
-import { saveServers } from "@/lib/serverStorage";
 import { toast } from "sonner";
+import { invoke } from "@tauri-apps/api/core";
 
 const AddServerModal = () => {
   const { servers, setServers, setSelectedServer } = useServer();
@@ -58,19 +58,39 @@ const AddServerModal = () => {
       status: "offline" as ServerStatus,
     };
 
-    const updated = [...servers, newServer];
-    setServers(updated);
-    setSelectedServer(newServer);
-
     try {
-      await saveServers(updated);
-      console.log("✅ Server salvato correttamente:", updated);
+      // 🔥 Usa direttamente le API Tauri invece del sistema di storage
+      console.log("📤 Invio server a Tauri:", newServer);
+      
+      // Converti il server nel formato che si aspetta Rust
+      const rustServer = {
+        id: newServer.id,
+        name: newServer.name,
+        ip: newServer.ip,
+        sshUser: newServer.sshUser, // camelCase per JavaScript
+        sshPort: newServer.sshPort,
+        authMethod: newServer.authMethod,
+        password: newServer.password || null,
+        sshKeyPath: newServer.sshKeyPath || null,
+        sshKey: newServer.sshKey,
+        serverType: newServer.type, // "type" è una parola riservata in Rust
+        status: newServer.status,
+      };
+
+      await invoke("save_server", { server: rustServer });
+      
+      // Aggiorna lo stato locale
+      const updated = [...servers, newServer];
+      setServers(updated);
+      setSelectedServer(newServer);
+
+      console.log("✅ Server salvato correttamente");
       toast.success("✅ Server aggiunto con successo");
       resetForm();
       setOpen(false);
     } catch (err) {
       console.error("❌ Errore durante il salvataggio:", err);
-      toast.error("❌ Errore durante il salvataggio");
+      toast.error(`❌ Errore: ${err}`);
     } finally {
       setIsSaving(false);
     }
