@@ -28,6 +28,7 @@ export const ServerProvider = ({ children }: { children: ReactNode }) => {
   const [terminalVisible, setTerminalVisible] = useState(false);
 
   useEffect(() => {
+    console.log("🔁 Esecuzione useEffect di caricamento...");
     loadServers().then((data) => {
       console.log("📂 Servers caricati da JSON:", data);
       if (data.length > 0) {
@@ -37,6 +38,14 @@ export const ServerProvider = ({ children }: { children: ReactNode }) => {
       }
     });
   }, []);
+  
+  // Salva ogni modifica ai server
+  useEffect(() => {
+    if (servers.length > 0) {
+      console.log("💾 Server aggiornati, salvo nel file...");
+      saveServers(servers);
+    }
+  }, [servers]);
 
   const toggleTerminal = () => setTerminalVisible((prev) => !prev);
 

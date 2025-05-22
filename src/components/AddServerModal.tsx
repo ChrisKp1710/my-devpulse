@@ -2,6 +2,7 @@ import {
   Dialog,
   DialogTrigger,
   DialogContent,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -10,18 +11,14 @@ import { useState } from "react";
 import { useServer } from "@/context/useServer";
 import type { ServerStatus, Server } from "@/context/ServerContext.types";
 import { saveServers } from "@/lib/serverStorage";
-import { toast } from "sonner"; // ✅ notifica visiva
+import { toast } from "sonner";
 
 const AddServerModal = () => {
-  const {
-    servers,
-    setServers,
-    setSelectedServer,
-  } = useServer();
+  const { servers, setServers, setSelectedServer } = useServer();
 
-  const [open, setOpen] = useState(false); // ✅ controlla apertura modale
+  const [open, setOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Campi form
   const [name, setName] = useState("");
   const [ip, setIp] = useState("");
   const [sshPort, setSshPort] = useState(22);
@@ -33,17 +30,20 @@ const AddServerModal = () => {
   const isFormValid =
     name && ip && sshUser && (authMethod === "password" ? password : sshKeyPath);
 
-  const resetFields = () => {
+  const resetForm = () => {
     setName("");
     setIp("");
     setSshPort(22);
     setSshUser("");
-    setAuthMethod("password");
     setPassword("");
     setSshKeyPath("");
+    setAuthMethod("password");
   };
 
   const handleAdd = async () => {
+    if (!isFormValid) return;
+    setIsSaving(true);
+
     const newServer: Server = {
       id: Date.now().toString(),
       name,
@@ -59,16 +59,21 @@ const AddServerModal = () => {
     };
 
     const updated = [...servers, newServer];
-    console.log("🆕 Nuovo server creato:", newServer);
-    console.log("📦 Lista aggiornata:", updated);
     setServers(updated);
-    await saveServers(updated);
     setSelectedServer(newServer);
 
-    toast.success("✅ Server aggiunto con successo");
-
-    setOpen(false); // ✅ chiudi modale
-    resetFields();  // ✅ resetta campi
+    try {
+      await saveServers(updated);
+      console.log("✅ Server salvato correttamente:", updated);
+      toast.success("✅ Server aggiunto con successo");
+      resetForm();
+      setOpen(false);
+    } catch (err) {
+      console.error("❌ Errore durante il salvataggio:", err);
+      toast.error("❌ Errore durante il salvataggio");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -80,6 +85,8 @@ const AddServerModal = () => {
       </DialogTrigger>
 
       <DialogContent className="sm:max-w-[420px]">
+        <DialogTitle className="sr-only">Aggiungi un nuovo server</DialogTitle>
+
         <div className="space-y-2">
           <h2 className="text-lg font-semibold">Aggiungi un nuovo server</h2>
           <p className="text-sm text-muted-foreground">
@@ -162,8 +169,12 @@ const AddServerModal = () => {
             </div>
           )}
 
-          <Button onClick={handleAdd} className="w-full mt-2" disabled={!isFormValid}>
-            Connetti
+          <Button
+            onClick={handleAdd}
+            className="w-full mt-2"
+            disabled={!isFormValid || isSaving}
+          >
+            {isSaving ? "Salvataggio..." : "Connetti"}
           </Button>
         </div>
       </DialogContent>

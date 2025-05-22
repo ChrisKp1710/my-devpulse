@@ -6,11 +6,17 @@ import { HashRouter, Routes, Route } from "react-router-dom"; // <-- cambiato da
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import { invoke } from "@tauri-apps/api/core";
+import { getName } from "@tauri-apps/api/app";
 
 // Test iniziale per verificare che le API Tauri funzionino
 invoke("greet", { name: "Christian" }).then((res) => {
   console.log(res);
 });
+
+
+getName()
+  .then(name => console.log("✅ Ambiente Tauri rilevato:", name))
+  .catch(() => console.warn("❌ Non sei in ambiente Tauri!"));
 
 const queryClient = new QueryClient();
 
