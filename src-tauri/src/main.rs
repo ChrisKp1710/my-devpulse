@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+// 📦 Import di librerie e moduli esterni
 use serde::{Deserialize, Serialize};
 use ssh2::Session;
 use std::collections::HashMap;
@@ -9,6 +10,7 @@ use std::net::TcpStream;
 use std::sync::Mutex;
 use tauri::{command, AppHandle, Manager, State};
 
+// 🧱 Definizione della struttura dati Server per la persistenza JSON
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Server {
@@ -25,6 +27,7 @@ pub struct Server {
     pub status: String,
 }
 
+// 🔐 Dati richiesti per avviare una connessione SSH
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SshConnectionRequest {
@@ -36,46 +39,41 @@ pub struct SshConnectionRequest {
     pub key_path: Option<String>,
 }
 
-// ✅ Struttura per mantenere le sessioni SSH attive
+// 🔄 Sessione SSH attiva (stream TCP + sessione SSH)
 pub struct SshSession {
     pub session: Session,
     pub stream: TcpStream,
 }
 
-// ✅ Store globale per le sessioni SSH
+// 🧠 Mappa globale delle sessioni attive (gestita con Mutex)
 pub type SshSessions = Mutex<HashMap<String, SshSession>>;
 
+// 👋 Funzione di esempio
 #[command]
 fn greet(name: &str) -> String {
     format!("Ciao, {}! 🎉", name)
 }
 
+// 🚀 Avvia una nuova sessione SSH
 #[command]
 async fn start_ssh_session(
     connection: SshConnectionRequest,
     ssh_sessions: State<'_, SshSessions>,
 ) -> Result<String, String> {
-    println!("🔐 Avvio sessione SSH verso {}@{}:{}", 
-             connection.username, connection.host, connection.port);
-    
-    // ✅ Crea connessione TCP
+    println!("🔐 Avvio sessione SSH verso {}@{}:{}", connection.username, connection.host, connection.port);
+
     let tcp = TcpStream::connect(format!("{}:{}", connection.host, connection.port))
         .map_err(|e| format!("Errore connessione TCP: {}", e))?;
-    
-    // ✅ Clona il stream prima di passarlo alla sessione
     let tcp_clone = tcp.try_clone().map_err(|e| format!("Errore clonazione stream: {}", e))?;
-    
-    // ✅ Inizializza sessione SSH
     let mut sess = Session::new().map_err(|e| format!("Errore creazione sessione SSH: {}", e))?;
     sess.set_tcp_stream(tcp_clone);
     sess.handshake().map_err(|e| format!("Errore handshake SSH: {}", e))?;
-    
-    // ✅ Autenticazione
+
     match connection.auth_method.as_str() {
         "password" => {
             if let Some(password) = &connection.password {
                 sess.userauth_password(&connection.username, password)
-                    .map_err(|e| format!("Errore autenticazione password: {}", e))?;
+                    .map_err(|e| format!("Errore autenticazione password: {}", e))?
             } else {
                 return Err("Password mancante per autenticazione password".to_string());
             }
@@ -83,43 +81,29 @@ async fn start_ssh_session(
         "key" => {
             if let Some(key_path) = &connection.key_path {
                 sess.userauth_pubkey_file(&connection.username, None, std::path::Path::new(key_path), None)
-                    .map_err(|e| format!("Errore autenticazione chiave: {}", e))?;
+                    .map_err(|e| format!("Errore autenticazione chiave: {}", e))?
             } else {
                 return Err("Percorso chiave mancante per autenticazione chiave".to_string());
             }
         }
         _ => return Err("Metodo di autenticazione non supportato".to_string()),
     }
-    
-    // ✅ Verifica autenticazione
+
     if !sess.authenticated() {
         return Err("Autenticazione fallita".to_string());
     }
-    
-    println!("✅ Autenticazione SSH riuscita per {}", connection.username);
-    
-    // ✅ Genera ID sessione e salva
-    let session_id = format!("ssh_{}_{}", connection.host, 
-                           std::time::SystemTime::now()
-                           .duration_since(std::time::UNIX_EPOCH)
-                           .unwrap()
-                           .as_secs());
-    
-    // ✅ Clona il TcpStream per il salvataggio (ora usiamo il stream originale)
-    let ssh_session = SshSession {
-        session: sess,
-        stream: tcp,  // ✅ Usiamo il TcpStream originale
-    };
-    
-    // ✅ Salva la sessione nel store globale
+
+    let session_id = format!("ssh_{}_{}", connection.host, std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
+    let ssh_session = SshSession { session: sess, stream: tcp };
+
     let mut sessions = ssh_sessions.lock().unwrap();
     sessions.insert(session_id.clone(), ssh_session);
-    
+
     println!("✅ Sessione SSH salvata: {}", session_id);
-    
     Ok(session_id)
 }
 
+// 📥 Esegue un comando su una sessione SSH esistente
 #[command]
 async fn execute_ssh_command(
     session_id: String,
@@ -127,60 +111,38 @@ async fn execute_ssh_command(
     ssh_sessions: State<'_, SshSessions>,
 ) -> Result<String, String> {
     println!("📝 Esecuzione comando: {} (Sessione: {})", command, session_id);
-    
-    // ✅ Recupera la sessione
+
     let mut sessions = ssh_sessions.lock().unwrap();
-    let ssh_session = sessions.get_mut(&session_id)
-        .ok_or_else(|| "Sessione SSH non trovata".to_string())?;
-    
-    // ✅ Crea canale per il comando
-    let mut channel = ssh_session.session.channel_session()
-        .map_err(|e| format!("Errore creazione canale: {}", e))?;
-    
-    // ✅ Esegui comando
-    channel.exec(&command)
-        .map_err(|e| format!("Errore esecuzione comando: {}", e))?;
-    
-    // ✅ Leggi output
+    let ssh_session = sessions.get_mut(&session_id).ok_or_else(|| "Sessione SSH non trovata".to_string())?;
+    let mut channel = ssh_session.session.channel_session().map_err(|e| format!("Errore creazione canale: {}", e))?;
+    channel.exec(&command).map_err(|e| format!("Errore esecuzione comando: {}", e))?;
+
     let mut output = String::new();
-    channel.read_to_string(&mut output)
-        .map_err(|e| format!("Errore lettura output: {}", e))?;
-    
-    // ✅ Leggi stderr se presente
+    channel.read_to_string(&mut output).map_err(|e| format!("Errore lettura output: {}", e))?;
+
     let mut stderr = String::new();
-    channel.stderr().read_to_string(&mut stderr)
-        .map_err(|e| format!("Errore lettura stderr: {}", e))?;
-    
-    // ✅ Attendi chiusura canale
-    channel.wait_close()
-        .map_err(|e| format!("Errore chiusura canale: {}", e))?;
-    
-    let exit_status = channel.exit_status()
-        .map_err(|e| format!("Errore status uscita: {}", e))?;
-    
-    // ✅ Combina output e stderr
+    channel.stderr().read_to_string(&mut stderr).map_err(|e| format!("Errore lettura stderr: {}", e))?;
+    channel.wait_close().map_err(|e| format!("Errore chiusura canale: {}", e))?;
+    let exit_status = channel.exit_status().map_err(|e| format!("Errore status uscita: {}", e))?;
+
     let mut result = output;
     if !stderr.is_empty() {
         result.push_str("\n--- STDERR ---\n");
         result.push_str(&stderr);
     }
-    
     if exit_status != 0 {
         result.push_str(&format!("\n--- EXIT CODE: {} ---", exit_status));
     }
-    
-    println!("✅ Comando eseguito, output length: {}", result.len());
-    
     Ok(result)
 }
 
+// ❌ Chiude una sessione SSH esistente e la rimuove dal registro
 #[command]
 async fn close_ssh_session(
     session_id: String,
     ssh_sessions: State<'_, SshSessions>,
 ) -> Result<(), String> {
     println!("🔌 Chiusura sessione SSH: {}", session_id);
-    
     let mut sessions = ssh_sessions.lock().unwrap();
     if let Some(_) = sessions.remove(&session_id) {
         println!("✅ Sessione SSH chiusa: {}", session_id);
@@ -190,21 +152,15 @@ async fn close_ssh_session(
     }
 }
 
+// 💾 Salva un nuovo server in servers.json
 #[command]
 async fn save_server(app: AppHandle, server: Server) -> Result<(), String> {
     println!("📥 Ricevuto server da salvare: {:?}", server);
-    
-    let app_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Errore nel recupero della cartella app: {e}"))?;
-
+    let app_dir = app.path().app_data_dir().map_err(|e| format!("Errore nel recupero della cartella app: {e}"))?;
     let file_path = app_dir.join("servers.json");
 
     if let Some(parent) = file_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| {
-            format!("Errore creazione directory: {e}")
-        })?;
+        fs::create_dir_all(parent).map_err(|e| format!("Errore creazione directory: {e}"))?;
     }
 
     let mut servers: Vec<Server> = if file_path.exists() {
@@ -217,50 +173,66 @@ async fn save_server(app: AppHandle, server: Server) -> Result<(), String> {
     };
 
     servers.push(server);
-
-    let json = serde_json::to_string_pretty(&servers)
-        .map_err(|e| format!("Errore serializzazione: {e}"))?;
-
-    fs::write(&file_path, &json)
-        .map_err(|e| format!("Errore scrittura file: {e}"))?;
-
+    let json = serde_json::to_string_pretty(&servers).map_err(|e| format!("Errore serializzazione: {e}"))?;
+    fs::write(&file_path, &json).map_err(|e| format!("Errore scrittura file: {e}"))?;
     println!("✅ Server salvato con successo");
     Ok(())
 }
 
+// 📤 Carica tutti i server da servers.json
 #[command]
 async fn load_servers(app: AppHandle) -> Result<Vec<Server>, String> {
-    let app_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Errore nel recupero della cartella app: {e}"))?;
-
+    let app_dir = app.path().app_data_dir().map_err(|e| format!("Errore nel recupero della cartella app: {e}"))?;
     let file_path = app_dir.join("servers.json");
-    
+
     if !file_path.exists() {
         return Ok(vec![]);
     }
 
-    let content = fs::read_to_string(&file_path)
-        .map_err(|e| format!("Errore lettura file: {e}"))?;
-
-    let servers: Vec<Server> = serde_json::from_str(&content)
-        .map_err(|e| format!("Errore parsing JSON: {e}"))?;
+    let content = fs::read_to_string(&file_path).map_err(|e| format!("Errore lettura file: {e}"))?;
+    let servers: Vec<Server> = serde_json::from_str(&content).map_err(|e| format!("Errore parsing JSON: {e}"))?;
 
     println!("✅ Caricati {} servers", servers.len());
     Ok(servers)
 }
 
+// 🗑️ Elimina un server dal file in base all'ID
+#[command]
+async fn delete_server(app: AppHandle, id: String) -> Result<(), String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| format!("Errore nel recupero della cartella app: {e}"))?;
+    let file_path = app_dir.join("servers.json");
+
+    if !file_path.exists() {
+        return Err("File servers.json non trovato".to_string());
+    }
+
+    let content = fs::read_to_string(&file_path).map_err(|e| format!("Errore lettura file: {e}"))?;
+    let mut servers: Vec<Server> = serde_json::from_str(&content).map_err(|e| format!("Errore parsing JSON: {e}"))?;
+    let original_len = servers.len();
+    servers.retain(|server| server.id != id);
+
+    if servers.len() == original_len {
+        return Err(format!("Nessun server con ID {} trovato", id));
+    }
+
+    let json = serde_json::to_string_pretty(&servers).map_err(|e| format!("Errore serializzazione JSON: {e}"))?;
+    fs::write(&file_path, json).map_err(|e| format!("Errore scrittura file: {e}"))?;
+    println!("🗑️ Server con ID {} eliminato correttamente", id);
+    Ok(())
+}
+
+// 🚀 Inizializzazione dell'app Tauri
 fn main() {
     tauri::Builder::default()
-        .manage(SshSessions::default()) // ✅ Inizializza il store delle sessioni SSH
+        .manage(SshSessions::default())
         .invoke_handler(tauri::generate_handler![
-            greet, 
-            save_server, 
-            load_servers, 
+            greet,
+            save_server,
+            load_servers,
+            delete_server,
             start_ssh_session,
             execute_ssh_command,
-            close_ssh_session // ✅ Nuovo comando per chiudere sessioni
+            close_ssh_session
         ])
         .run(tauri::generate_context!())
         .expect("Errore durante l'avvio dell'app");

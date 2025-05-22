@@ -39,6 +39,17 @@ export const saveServer = async (server: Server): Promise<void> => {
   }
 };
 
+// 🗑️ Elimina un server per ID
+export const deleteServerById = async (id: string): Promise<void> => {
+  try {
+    await invoke("delete_server", { id });
+    console.log("🗑️ Server eliminato:", id);
+  } catch (error) {
+    console.error("❌ Errore eliminazione server:", error);
+    throw error;
+  }
+};
+
 // Per compatibilità (deprecata)
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export const saveServers = async (_servers: Server[]): Promise<void> => {

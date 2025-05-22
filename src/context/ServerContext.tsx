@@ -7,6 +7,7 @@ import {
 import type { Server, ServerStatus } from './ServerContext.types';
 import { loadServers } from "@/lib/serverStorage";
 import { invoke } from "@tauri-apps/api/core";
+import { deleteServerById } from "@/lib/serverStorage";
 
 interface ServerContextType {
   servers: Server[];
@@ -18,6 +19,7 @@ interface ServerContextType {
   toggleTerminal: () => void;
   toggleServerStatus: (id: string) => void;
   startSshConnection: (server: Server) => Promise<void>;
+  removeServer: (id: string) => Promise<void>; 
 }
 
 /* eslint-disable react-refresh/only-export-components */
@@ -52,6 +54,19 @@ export const ServerProvider = ({ children }: { children: ReactNode }) => {
 
     loadServersFromTauri();
   }, []);
+
+  const removeServer = async (id: string) => {
+    try {
+      await deleteServerById(id);
+      setServers(prev => prev.filter(server => server.id !== id));
+      if (selectedServer?.id === id) {
+        setSelectedServer(null);
+      }
+      console.log("🗑️ Server eliminato:", id);
+    } catch (error) {
+      console.error("❌ Errore eliminazione server:", error);
+    }
+  };
 
   const toggleTerminal = async () => {
     setTerminalVisible((prev) => !prev);
@@ -129,6 +144,7 @@ export const ServerProvider = ({ children }: { children: ReactNode }) => {
         toggleTerminal,
         toggleServerStatus,
         startSshConnection,
+        removeServer,
       }}
     >
       {children}
