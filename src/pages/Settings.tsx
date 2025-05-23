@@ -302,7 +302,7 @@ const Settings: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <div className="p-6 max-w-6xl mx-auto w-full">
+      <div className="p-4 max-w-4xl mx-auto w-full">
         <div className="flex items-center gap-2 mb-6">
           <SettingsIcon className="h-6 w-6" />
           <h2 className="text-2xl font-bold">DevPulse Settings</h2>
@@ -412,7 +412,7 @@ const Settings: React.FC = () => {
               
               {/* Appearance Settings - continua in prossimo messaggio per limiti di lunghezza */}
               <TabsContent value="appearance" className="m-0">
-                <Card>
+                <Card className="ring-1 ring-border">
                   <CardHeader>
                     <CardTitle>Appearance</CardTitle>
                     <CardDescription>Customize the look and feel of the application</CardDescription>
@@ -446,7 +446,7 @@ const Settings: React.FC = () => {
                           <div 
                             key={preset.name}
                             onClick={() => applyPresetTheme(preset.name)} 
-                            className={`cursor-pointer rounded-lg border transition-all hover:scale-105 ${selectedPreset === preset.name ? "border-primary ring-2 ring-primary" : "border-border"}`}
+                            className={`cursor-pointer rounded-lg border transition-all hover:ring-1 hover:ring-muted-foreground ${selectedPreset === preset.name ? "border-primary ring-2 ring-primary" : "border-border"}`}
                           >
                             <div 
                               className="aspect-video rounded-t-md" 
@@ -467,10 +467,11 @@ const Settings: React.FC = () => {
                     </div>
                     
                     <div className="space-y-4">
-                      <h3 className="text-lg font-medium">Custom Theme</h3>
+                      <h3 className="text-lg font-semibold">Custom Theme</h3>
+                      <p className="text-sm text-muted-foreground">Customize colors below</p>
                       <Separator />
                       
-                      <div className="grid md:grid-cols-2 gap-6">
+                      <div className="grid md:grid-cols-[1fr_300px] gap-6 items-start">
                         <div className="space-y-4">
                           <div>
                             <Label htmlFor="primary-color">Primary Color</Label>
@@ -532,7 +533,7 @@ const Settings: React.FC = () => {
                           <Label className="mb-2 block">Live Preview</Label>
                           <ThemePreview theme={customTheme} />
                           
-                          <Button className="mt-4 w-full" onClick={() => {
+                          <Button className="mt-4 w-full h-10 text-base font-medium"onClick={() => {
                             toast.success("🎨 Theme applied successfully");
                           }}>
                             <Save className="h-4 w-4 mr-2" />
