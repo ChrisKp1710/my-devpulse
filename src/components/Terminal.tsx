@@ -18,11 +18,12 @@ const TerminalComponent: React.FC = () => {
   const [realHostname, setRealHostname] = useState<string | null>(null);
   const [realUsername, setRealUsername] = useState<string | null>(null);
 
-  // Funzione per mostrare il prompt
-  const showPrompt = useCallback((terminal: Terminal) => {
-    const user = realUsername || selectedServer?.sshUser || "user";
-    const host = realHostname || selectedServer?.name || "server";
-    terminal.write(`\r\n\x1b[32m${user}@${host}\x1b[0m:\x1b[34m${currentPath}\x1b[0m$ `);
+  // Funzione per mostrare il prompt con valori specifici
+  const showPromptWithValues = useCallback((terminal: Terminal, username?: string, hostname?: string, path?: string) => {
+    const user = username || realUsername || selectedServer?.sshUser || "user";
+    const host = hostname || realHostname || selectedServer?.name || "server";
+    const currentDir = path || currentPath || "~";
+    terminal.write(`\r\n\x1b[32m${user}@${host}\x1b[0m:\x1b[34m${currentDir}\x1b[0m$ `);
   }, [selectedServer?.sshUser, selectedServer?.name, currentPath, realHostname, realUsername]);
 
   // Funzione per inizializzare il terminale in modo sicuro
@@ -117,6 +118,10 @@ const TerminalComponent: React.FC = () => {
       terminalInstance.writeln(`🔑 Sessione: ${sshSessionId}`);
       terminalInstance.writeln("\r\n🚀 Terminale pronto per i comandi SSH!");
 
+      // Variabili per i valori reali
+      let actualUsername = selectedServer.sshUser;
+      let serverHostname = selectedServer.name;
+
       // ✅ Test di connessione e recupero info server REALI
       try {
         // 👤 Recupera l'utente reale connesso
@@ -124,7 +129,7 @@ const TerminalComponent: React.FC = () => {
           sessionId: sshSessionId,
           command: "whoami"
         });
-        const actualUsername = whoamiResult.trim();
+        actualUsername = whoamiResult.trim();
         terminalInstance.writeln(`👤 Utente connesso: ${actualUsername}`);
         setRealUsername(actualUsername); // ✅ Salva l'utente reale
 
@@ -133,7 +138,7 @@ const TerminalComponent: React.FC = () => {
           sessionId: sshSessionId,
           command: "hostname"
         });
-        const serverHostname = hostnameResult.trim();
+        serverHostname = hostnameResult.trim();
         
         // ✅ Aggiorna il nome del server per il prompt E il titolo
         if (serverHostname && serverHostname !== selectedServer.name) {
@@ -155,7 +160,8 @@ const TerminalComponent: React.FC = () => {
         console.warn("⚠️ Test connessione fallito:", error);
       }
 
-      showPrompt(terminalInstance);
+      // ✅ PROMPT con valori reali (usando le variabili locali, non gli stati)
+      showPromptWithValues(terminalInstance, actualUsername, serverHostname, currentPath);
 
       let currentCommand = "";
 
@@ -198,7 +204,8 @@ const TerminalComponent: React.FC = () => {
           }
           
           currentCommand = "";
-          showPrompt(terminalInstance);
+          // ✅ Usa sempre i valori reali se disponibili per il nuovo prompt
+          showPromptWithValues(terminalInstance, actualUsername, serverHostname);
         } else if (code === 127) { // Backspace
           if (currentCommand.length > 0) {
             currentCommand = currentCommand.slice(0, -1);
@@ -207,7 +214,7 @@ const TerminalComponent: React.FC = () => {
         } else if (code === 3) { // Ctrl+C
           terminalInstance.writeln("\r\n^C");
           currentCommand = "";
-          showPrompt(terminalInstance);
+          showPromptWithValues(terminalInstance, actualUsername, serverHostname);
         } else if (code >= 32) { // Caratteri stampabili
           currentCommand += data;
           terminalInstance.write(data);
@@ -229,7 +236,7 @@ const TerminalComponent: React.FC = () => {
     } catch (error) {
       console.error("❌ Errore critico inizializzazione terminale:", error);
     }
-  }, [selectedServer, sshSessionId, term, showPrompt]);
+  }, [selectedServer, sshSessionId, term, showPromptWithValues, currentPath]);
 
   // Effect per inizializzare il terminale
   useEffect(() => {
