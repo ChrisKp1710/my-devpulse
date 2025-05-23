@@ -1,11 +1,11 @@
+// src/pages/Index.tsx - VERSIONE CORRETTA
 import ServerList from '../components/ServerList';
 import ServerSidebar from '../components/ServerSidebar';
 import Terminal from '../components/Terminal';
 import { useServer } from '../context/useServer';
-import { ServerProvider } from '../context/ServerContext';
 import ServerActions from '../components/ServerActions';
 
-const Layout = () => {
+const Index = () => {
   const { terminalVisible, selectedServer } = useServer();
 
   return (
@@ -35,10 +35,5 @@ const Layout = () => {
   );
 };
 
-const Index = () => (
-  <ServerProvider>
-    <Layout />
-  </ServerProvider>
-);
-
+// ✅ ESPORTA DIRETTAMENTE IL COMPONENTE (senza ServerProvider)
 export default Index;

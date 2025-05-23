@@ -1,3 +1,4 @@
+// src/App.tsx - VERSIONE CORRETTA
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -11,6 +12,7 @@ import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getName } from "@tauri-apps/api/app";
+import { ServerProvider } from "@/context/ServerContext"; // ✅ IMPORTA ServerProvider
 
 const queryClient = new QueryClient();
 
@@ -41,18 +43,22 @@ const App = () => (
         <TauriInitializer />
         <Toaster />
         <Sonner />
-        <HashRouter>
-          <div className="min-h-screen flex flex-col bg-background">
-            <Navbar />
-            <div className="flex-1 px-6 py-4">
-              <Routes>
-                <Route path="/" element={<Index />} />
-                <Route path="/settings" element={<Settings />} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
+        
+        {/* ✅ SPOSTA ServerProvider QUI per coprire TUTTA l'app */}
+        <ServerProvider>
+          <HashRouter>
+            <div className="min-h-screen flex flex-col bg-background">
+              <Navbar />
+              <div className="flex-1 px-6 py-4">
+                <Routes>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/settings" element={<Settings />} />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </div>
             </div>
-          </div>
-        </HashRouter>
+          </HashRouter>
+        </ServerProvider>
       </TooltipProvider>
     </ThemeProvider>
   </QueryClientProvider>
