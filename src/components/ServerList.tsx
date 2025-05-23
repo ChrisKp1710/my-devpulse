@@ -7,9 +7,7 @@ const ServerList: React.FC = () => {
   const { servers } = useServer();
 
   return (
-    <div className="p-6">
-      <h2 className="text-2xl font-bold text-foreground mb-6">Servers</h2>
-
+    <div className="p-6 pt-0">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {servers.map((server: Server) => (
           <ServerCard key={server.id} server={server} />
