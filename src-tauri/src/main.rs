@@ -1,15 +1,17 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-// 📦 Import di librerie e moduli esterni
+// 📦 Import di librerie e moduli esterni - CORRETTI
 use serde::{Deserialize, Serialize};
 use ssh2::Session;
 use std::collections::HashMap;
 use std::fs;
 use std::io::prelude::*;
-use std::net::{TcpStream, SocketAddr}; // ✅ AGGIUNTO per ping
+use std::net::{TcpStream, SocketAddr};
 use std::sync::Mutex;
-use std::time::{Duration, Instant}; // ✅ AGGIUNTO per ping
+use std::time::{Duration, Instant};
 use tauri::{command, AppHandle, Manager, State};
+use tauri_plugin_dialog::DialogExt;
+use chrono::Utc;
 
 // 🧱 Definizione della struttura dati Server per la persistenza JSON
 #[derive(Serialize, Deserialize, Debug)]
@@ -279,6 +281,7 @@ async fn delete_server(app: AppHandle, id: String) -> Result<(), String> {
     Ok(())
 }
 
+// 📤 Esporta server come JSON string (per uso interno)
 #[command]
 async fn export_servers_json(app: AppHandle) -> Result<String, String> {
     let servers = load_servers(app).await?;
@@ -286,6 +289,7 @@ async fn export_servers_json(app: AppHandle) -> Result<String, String> {
         .map_err(|e| format!("Errore serializzazione: {}", e))
 }
 
+// 📥 Importa server da JSON string (per uso interno)
 #[command]
 async fn import_servers_json(app: AppHandle, json_data: String) -> Result<usize, String> {
     let new_servers: Vec<Server> = serde_json::from_str(&json_data)
@@ -303,11 +307,138 @@ async fn import_servers_json(app: AppHandle, json_data: String) -> Result<usize,
     Ok(new_servers.len())
 }
 
+// 📤 Esporta i server in un file con dialog di salvataggio - ✅ CORRETTO
+#[command]
+async fn export_servers_to_file(app: AppHandle) -> Result<String, String> {
+    println!("📤 Inizio esportazione server con dialog...");
+    
+    // Carica i server esistenti
+    let servers = load_servers(app.clone()).await?;
+    if servers.is_empty() {
+        return Err("Nessun server da esportare".to_string());
+    }
+    
+    // Genera il nome del file con data corrente
+    let current_date = Utc::now().format("%Y-%m-%d").to_string();
+    let default_filename = format!("devpulse-servers-{}.json", current_date);
+    
+    // Apri dialog di salvataggio
+    let file_path = app.dialog()
+        .file()
+        .set_title("Salva configurazione server")
+        .set_file_name(&default_filename)
+        .add_filter("JSON Files", &["json"])
+        .blocking_save_file();
+    
+    match file_path {
+        Some(path) => {
+            // Serializza i server in JSON
+            let json_content = serde_json::to_string_pretty(&servers)
+                .map_err(|e| format!("Errore serializzazione JSON: {}", e))?;
+            
+            // ✅ CORRETTO: Converti FilePath in PathBuf
+            let path_buf = std::path::PathBuf::from(path.to_string());
+            
+            // Scrivi il file
+            fs::write(&path_buf, json_content)
+                .map_err(|e| format!("Errore scrittura file: {}", e))?;
+            
+            let path_str = path_buf.to_string_lossy().to_string();
+            println!("✅ Server esportati in: {}", path_str);
+            Ok(path_str)
+        }
+        None => Err("Esportazione annullata dall'utente".to_string())
+    }
+}
 
+// 📥 Importa server da file con dialog di apertura - ✅ MIGLIORATO
+#[command]
+async fn import_servers_from_file(app: AppHandle) -> Result<usize, String> {
+    println!("📥 Inizio importazione server con dialog...");
+    
+    // Apri dialog di apertura file
+    let file_path = app.dialog()
+        .file()
+        .set_title("Seleziona file di configurazione server")
+        .add_filter("JSON Files", &["json"])
+        .add_filter("Tutti i file", &["*"])  // ✅ Permetti tutti i file JSON
+        .blocking_pick_file();
+    
+    match file_path {
+        Some(path) => {
+            // ✅ CORRETTO: Converti FilePath in PathBuf
+            let path_buf = std::path::PathBuf::from(path.to_string());
+            
+            println!("📂 File selezionato: {}", path_buf.display());
+            
+            // Leggi il contenuto del file
+            let content = fs::read_to_string(&path_buf)
+                .map_err(|e| format!("Errore lettura file: {}", e))?;
+            
+            // ✅ VALIDAZIONE: Controlla che sia un file JSON valido con server
+            let new_servers: Vec<Server> = serde_json::from_str(&content)
+                .map_err(|e| format!("File non valido - Errore parsing JSON: {}", e))?;
+            
+            if new_servers.is_empty() {
+                return Err("Il file selezionato non contiene server validi".to_string());
+            }
+            
+            // ✅ VALIDAZIONE: Controlla che i server abbiano i campi necessari
+            for (i, server) in new_servers.iter().enumerate() {
+                if server.id.is_empty() || server.name.is_empty() || server.ip.is_empty() {
+                    return Err(format!("Server #{} nel file ha campi mancanti (id, name, ip)", i + 1));
+                }
+            }
+            
+            println!("✅ File validato: {} server trovati", new_servers.len());
+            
+            // ✅ AUTOMATICO: Salva come servers.json nella cartella dell'app
+            let app_dir = app.path().app_data_dir()
+                .map_err(|e| format!("Errore recupero cartella app: {}", e))?;
+            let servers_file = app_dir.join("servers.json");  // ✅ SEMPRE servers.json
+            
+            // Crea la directory se non esiste
+            if let Some(parent) = servers_file.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|e| format!("Errore creazione directory: {}", e))?;
+            }
+            
+            // ✅ BACKUP: Se esiste già un servers.json, fai un backup
+            if servers_file.exists() {
+                let backup_name = format!("servers_backup_{}.json", 
+                    chrono::Utc::now().format("%Y%m%d_%H%M%S"));
+                let backup_path = app_dir.join(&backup_name);
+                
+                if let Err(e) = fs::copy(&servers_file, &backup_path) {
+                    println!("⚠️ Warning: Impossibile creare backup: {}", e);
+                } else {
+                    println!("📋 Backup creato: {}", backup_name);
+                }
+            }
+            
+            // ✅ SALVA: Scrivi i nuovi server come servers.json
+            let json = serde_json::to_string_pretty(&new_servers)
+                .map_err(|e| format!("Errore serializzazione: {}", e))?;
+            fs::write(&servers_file, json)
+                .map_err(|e| format!("Errore scrittura file servers.json: {}", e))?;
+            
+            let count = new_servers.len();
+            let original_filename = path_buf.file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("file sconosciuto");
+                
+            println!("✅ Importati {} server da '{}' → servers.json", count, original_filename);
+            Ok(count)
+        }
+        None => Err("Importazione annullata dall'utente".to_string())
+    }
+}
 // 🚀 Inizializzazione dell'app Tauri - ✅ AGGIORNATA
 fn main() {
     tauri::Builder::default()
         .manage(SshSessions::default())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             greet,
             save_server,
@@ -319,7 +450,9 @@ fn main() {
             ping_server,
             ping_all_servers,
             export_servers_json,
-            import_servers_json
+            import_servers_json,
+            export_servers_to_file,
+            import_servers_from_file
         ])
         .run(tauri::generate_context!())
         .expect("Errore durante l'avvio dell'app");

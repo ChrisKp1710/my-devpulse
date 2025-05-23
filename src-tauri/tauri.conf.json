@@ -34,12 +34,9 @@
       "icons/icon.ico"
     ]
   },
-"plugins": {
-  "dialog": {
-    "enabled": true
-  },
-  "fs": {
-    "enabled": true
+  "plugins": {
+    "fs": {
+      "requireLiteralLeadingDot": false
+    }
   }
-}
 }

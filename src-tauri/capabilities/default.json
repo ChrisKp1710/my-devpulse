@@ -8,6 +8,8 @@
     "core:app:default",
     "core:path:default",
     "fs:allow-write-text-file",
-    "fs:allow-read-text-file"
+    "fs:allow-read-text-file",
+    "fs:allow-appdata-write",
+    "fs:allow-appdata-read"
   ]
 }
