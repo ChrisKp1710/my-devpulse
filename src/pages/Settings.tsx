@@ -12,9 +12,9 @@ import { toast } from "sonner";
 import { useServer } from "@/context/useServer";
 import { loadServers } from "@/lib/serverStorage";
 import { invoke } from "@tauri-apps/api/core";
+import BackupSettings from '@/components/BackupSettings';
 import {
   DownloadCloud,
-  Upload,
   Save,
   RotateCw,
   Palette,
@@ -24,6 +24,7 @@ import {
   AlertTriangle,
   Settings as SettingsIcon,
 } from 'lucide-react';
+
 
 // Pre-defined themes
 const PRESET_THEMES = [
@@ -112,54 +113,6 @@ const Settings: React.FC = () => {
       setSelectedPreset(presetName);
       setCustomTheme(preset.colors);
     }
-  };
-
-  // ✅ TAURI: Export servers using Tauri commands
-  const handleExportServers = async () => {
-    try {
-      const jsonData = await invoke<string>("export_servers_json");
-      
-      const dataBlob = new Blob([jsonData], { type: 'application/json' });
-      const url = URL.createObjectURL(dataBlob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `devpulse-servers-${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      
-      toast.success("✅ Server configurations exported successfully");
-    } catch (error) {
-      console.error("❌ Export error:", error);
-      toast.error(`❌ Export failed: ${error}`);
-    }
-  };
-
-  // ✅ TAURI: Import servers using file input
-  const handleImportServers = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-
-      try {
-        const text = await file.text();
-        const importedCount = await invoke<number>("import_servers_json", { jsonData: text });
-        
-        // Reload servers in the context
-        const updatedServers = await loadServers();
-        setServers(updatedServers);
-        
-        toast.success(`✅ Successfully imported ${importedCount} servers`);
-      } catch (error) {
-        console.error("❌ Import error:", error);
-        toast.error(`❌ Import failed: ${error}`);
-      }
-    };
-    input.click();
   };
 
   // Export custom theme
@@ -638,42 +591,7 @@ const Settings: React.FC = () => {
               
               {/* Backup & Import Settings */}
               <TabsContent value="backup" className="m-0">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Configuration Backup</CardTitle>
-                    <CardDescription>Backup and restore your server configurations</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-medium">Server Configurations</h3>
-                      <Separator />
-                      
-                      <div className="grid gap-4">
-                        <Button 
-                          className="flex items-center justify-start" 
-                          onClick={handleExportServers}
-                        >
-                          <DownloadCloud className="h-4 w-4 mr-2" />
-                          Export Servers
-                        </Button>
-                        
-                        <Button 
-                          variant="outline" 
-                          className="flex items-center justify-start" 
-                          onClick={handleImportServers}
-                        >
-                          <Upload className="h-4 w-4 mr-2" />
-                          Import Servers
-                        </Button>
-                        
-                        <p className="text-sm text-muted-foreground">
-                          Server configurations are exported as a JSON file that you can save as a backup.
-                          You can later import this file to restore all your servers.
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                <BackupSettings />
               </TabsContent>
               
               {/* Advanced Settings */}

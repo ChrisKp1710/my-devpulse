@@ -279,6 +279,31 @@ async fn delete_server(app: AppHandle, id: String) -> Result<(), String> {
     Ok(())
 }
 
+#[command]
+async fn export_servers_json(app: AppHandle) -> Result<String, String> {
+    let servers = load_servers(app).await?;
+    serde_json::to_string_pretty(&servers)
+        .map_err(|e| format!("Errore serializzazione: {}", e))
+}
+
+#[command]
+async fn import_servers_json(app: AppHandle, json_data: String) -> Result<usize, String> {
+    let new_servers: Vec<Server> = serde_json::from_str(&json_data)
+        .map_err(|e| format!("Errore parsing JSON: {}", e))?;
+
+    let app_dir = app.path().app_data_dir()
+        .map_err(|e| format!("Errore nel recupero cartella app: {}", e))?;
+    let file_path = app_dir.join("servers.json");
+
+    let json = serde_json::to_string_pretty(&new_servers)
+        .map_err(|e| format!("Errore serializzazione: {}", e))?;
+    fs::write(&file_path, json)
+        .map_err(|e| format!("Errore scrittura file: {}", e))?;
+
+    Ok(new_servers.len())
+}
+
+
 // 🚀 Inizializzazione dell'app Tauri - ✅ AGGIORNATA
 fn main() {
     tauri::Builder::default()
@@ -292,7 +317,9 @@ fn main() {
             execute_ssh_command,
             close_ssh_session,
             ping_server,        // ✅ NUOVO
-            ping_all_servers    // ✅ NUOVO
+            ping_all_servers,   // ✅ NUOVO
+            export_servers_json,  // ✅ AGGIUNTO
+            import_servers_json 
         ])
         .run(tauri::generate_context!())
         .expect("Errore durante l'avvio dell'app");
