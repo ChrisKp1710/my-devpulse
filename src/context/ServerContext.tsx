@@ -1,3 +1,4 @@
+// src/context/ServerContext.tsx - VERSIONE AGGIORNATA
 import {
   createContext,
   useEffect,
@@ -8,21 +9,25 @@ import type { Server, ServerStatus } from './ServerContext.types';
 import { loadServers } from "@/lib/serverStorage";
 import { invoke } from "@tauri-apps/api/core";
 import { deleteServerById } from "@/lib/serverStorage";
+import { useServerMonitoring } from '@/hooks/useServerMonitoring';
 
 interface ServerContextType {
   servers: Server[];
   selectedServer: Server | null;
   terminalVisible: boolean;
   sshSessionId: string | null;
+  serverStatuses: Record<string, { isOnline: boolean; lastChecked: number; responseTime?: number }>;
+  isMonitoring: boolean;
   setServers: (servers: Server[]) => void;
   setSelectedServer: (server: Server | null) => void;
   toggleTerminal: () => void;
   toggleServerStatus: (id: string) => void;
   startSshConnection: (server: Server) => Promise<void>;
-  removeServer: (id: string) => Promise<void>; 
+  removeServer: (id: string) => Promise<void>;
+  refreshServerStatuses: () => void;
 }
 
-/* eslint-disable react-refresh/only-export-components */
+// eslint-disable-next-line react-refresh/only-export-components
 export const ServerContext = createContext<ServerContextType | undefined>(
   undefined
 );
@@ -32,6 +37,9 @@ export const ServerProvider = ({ children }: { children: ReactNode }) => {
   const [selectedServer, setSelectedServer] = useState<Server | null>(null);
   const [terminalVisible, setTerminalVisible] = useState(false);
   const [sshSessionId, setSshSessionId] = useState<string | null>(null);
+
+  // ✅ Usa il hook di monitoring
+  const { serverStatuses, isMonitoring, refreshServerStatuses, getServerStatus } = useServerMonitoring(servers);
 
   useEffect(() => {
     console.log("🔁 Caricamento server da Tauri...");
@@ -55,6 +63,38 @@ export const ServerProvider = ({ children }: { children: ReactNode }) => {
     loadServersFromTauri();
   }, []);
 
+  // ✅ Aggiorna automaticamente lo status dei server nel context
+  useEffect(() => {
+    if (servers.length === 0) return;
+
+    const updatedServers = servers.map(server => {
+      const status = getServerStatus(server.id);
+      if (status) {
+        const newStatus: ServerStatus = status.isOnline ? 'online' : 'offline';
+        return { ...server, status: newStatus };
+      }
+      return server;
+    });
+
+    // Solo aggiorna se c'è davvero un cambiamento
+    const hasChanges = updatedServers.some((server, index) => 
+      server.status !== servers[index]?.status
+    );
+
+    if (hasChanges) {
+      setServers(updatedServers);
+      console.log('🔄 Status server aggiornati automaticamente');
+      
+      // Aggiorna anche il server selezionato se necessario
+      if (selectedServer) {
+        const updatedSelectedServer = updatedServers.find(s => s.id === selectedServer.id);
+        if (updatedSelectedServer && updatedSelectedServer.status !== selectedServer.status) {
+          setSelectedServer(updatedSelectedServer);
+        }
+      }
+    }
+  }, [serverStatuses, servers, selectedServer, getServerStatus]);
+
   const removeServer = async (id: string) => {
     try {
       await deleteServerById(id);
@@ -71,7 +111,6 @@ export const ServerProvider = ({ children }: { children: ReactNode }) => {
   const toggleTerminal = async () => {
     setTerminalVisible((prev) => !prev);
     
-    // ✅ Se chiudiamo il terminale, chiudiamo anche la sessione SSH
     if (terminalVisible && sshSessionId) {
       try {
         await invoke("close_ssh_session", { sessionId: sshSessionId });
@@ -98,7 +137,6 @@ export const ServerProvider = ({ children }: { children: ReactNode }) => {
 
       console.log("📤 Invio richiesta connessione:", connectionRequest);
 
-      // ✅ Ora la connessione SSH è reale!
       const sessionId = await invoke<string>("start_ssh_session", { 
         connection: connectionRequest 
       });
@@ -139,12 +177,15 @@ export const ServerProvider = ({ children }: { children: ReactNode }) => {
         selectedServer,
         terminalVisible,
         sshSessionId,
+        serverStatuses,
+        isMonitoring,
         setServers,
         setSelectedServer,
         toggleTerminal,
         toggleServerStatus,
         startSshConnection,
         removeServer,
+        refreshServerStatuses,
       }}
     >
       {children}

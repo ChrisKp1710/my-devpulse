@@ -6,8 +6,9 @@ use ssh2::Session;
 use std::collections::HashMap;
 use std::fs;
 use std::io::prelude::*;
-use std::net::TcpStream;
+use std::net::{TcpStream, SocketAddr}; // ✅ AGGIUNTO per ping
 use std::sync::Mutex;
+use std::time::{Duration, Instant}; // ✅ AGGIUNTO per ping
 use tauri::{command, AppHandle, Manager, State};
 
 // 🧱 Definizione della struttura dati Server per la persistenza JSON
@@ -39,6 +40,15 @@ pub struct SshConnectionRequest {
     pub key_path: Option<String>,
 }
 
+// ✅ NUOVO: Struttura per il risultato del ping
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct PingResult {
+    pub is_online: bool,
+    pub response_time_ms: Option<u64>,
+    pub error_message: Option<String>,
+}
+
 // 🔄 Sessione SSH attiva (stream TCP + sessione SSH)
 pub struct SshSession {
     pub session: Session,
@@ -52,6 +62,54 @@ pub type SshSessions = Mutex<HashMap<String, SshSession>>;
 #[command]
 fn greet(name: &str) -> String {
     format!("Ciao, {}! 🎉", name)
+}
+
+// ✅ NUOVO: Comando per fare ping a un server
+#[command]
+async fn ping_server(host: String, port: u16) -> Result<PingResult, String> {
+    println!("🏓 Ping verso {}:{}", host, port);
+    
+    let address = format!("{}:{}", host, port);
+    let socket_addr: SocketAddr = address.parse()
+        .map_err(|e| format!("Indirizzo non valido: {}", e))?;
+    
+    let start_time = Instant::now();
+    
+    // Timeout di 5 secondi per la connessione
+    match TcpStream::connect_timeout(&socket_addr, Duration::from_secs(5)) {
+        Ok(_stream) => {
+            let response_time = start_time.elapsed().as_millis() as u64;
+            println!("✅ Server {}:{} è ONLINE ({}ms)", host, port, response_time);
+            
+            Ok(PingResult {
+                is_online: true,
+                response_time_ms: Some(response_time),
+                error_message: None,
+            })
+        }
+        Err(e) => {
+            println!("❌ Server {}:{} è OFFLINE - Errore: {}", host, port, e);
+            Ok(PingResult {
+                is_online: false,
+                response_time_ms: None,
+                error_message: Some(format!("Connessione fallita: {}", e)),
+            })
+        }
+    }
+}
+
+// ✅ NUOVO: Comando per fare ping a tutti i server salvati
+#[command]
+async fn ping_all_servers(app: AppHandle) -> Result<Vec<(String, PingResult)>, String> {
+    let servers = load_servers(app).await?;
+    let mut results = Vec::new();
+    
+    for server in servers {
+        let ping_result = ping_server(server.ip.clone(), server.ssh_port).await?;
+        results.push((server.id, ping_result));
+    }
+    
+    Ok(results)
 }
 
 // 🚀 Avvia una nuova sessione SSH
@@ -221,7 +279,7 @@ async fn delete_server(app: AppHandle, id: String) -> Result<(), String> {
     Ok(())
 }
 
-// 🚀 Inizializzazione dell'app Tauri
+// 🚀 Inizializzazione dell'app Tauri - ✅ AGGIORNATA
 fn main() {
     tauri::Builder::default()
         .manage(SshSessions::default())
@@ -232,7 +290,9 @@ fn main() {
             delete_server,
             start_ssh_session,
             execute_ssh_command,
-            close_ssh_session
+            close_ssh_session,
+            ping_server,        // ✅ NUOVO
+            ping_all_servers    // ✅ NUOVO
         ])
         .run(tauri::generate_context!())
         .expect("Errore durante l'avvio dell'app");
