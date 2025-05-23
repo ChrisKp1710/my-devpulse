@@ -14,26 +14,16 @@ const TerminalComponent: React.FC = () => {
   const [isTerminalReady, setIsTerminalReady] = useState(false);
   const { selectedServer, sshSessionId, toggleTerminal } = useServer();
 
-  // ✅ NUOVO: Stato per salvare il vero hostname e user del server
-  const [serverInfo, setServerInfo] = useState<{
-    hostname: string;
-    username: string;
-  } | null>(null);
+  // Stato per salvare il vero hostname del server
+  const [realHostname, setRealHostname] = useState<string | null>(null);
+  const [realUsername, setRealUsername] = useState<string | null>(null);
 
-  // Funzione per mostrare il prompt con hostname REALE
+  // Funzione per mostrare il prompt
   const showPrompt = useCallback((terminal: Terminal) => {
-    if (serverInfo) {
-      // ✅ USA I DATI REALI DEL SERVER
-      const user = serverInfo.username;
-      const host = serverInfo.hostname;
-      terminal.write(`\r\n\x1b[32m${user}@${host}\x1b[0m:\x1b[34m${currentPath}\x1b[0m$ `);
-    } else {
-      // Fallback temporaneo mentre recuperiamo le info
-      const user = selectedServer?.sshUser || "user";
-      const host = selectedServer?.name || "server";
-      terminal.write(`\r\n\x1b[32m${user}@${host}\x1b[0m:\x1b[34m${currentPath}\x1b[0m$ `);
-    }
-  }, [serverInfo, selectedServer?.sshUser, selectedServer?.name, currentPath]);
+    const user = realUsername || selectedServer?.sshUser || "user";
+    const host = realHostname || selectedServer?.name || "server";
+    terminal.write(`\r\n\x1b[32m${user}@${host}\x1b[0m:\x1b[34m${currentPath}\x1b[0m$ `);
+  }, [selectedServer?.sshUser, selectedServer?.name, currentPath, realHostname, realUsername]);
 
   // Funzione per inizializzare il terminale in modo sicuro
   const initializeTerminal = useCallback(async () => {
@@ -127,29 +117,29 @@ const TerminalComponent: React.FC = () => {
       terminalInstance.writeln(`🔑 Sessione: ${sshSessionId}`);
       terminalInstance.writeln("\r\n🚀 Terminale pronto per i comandi SSH!");
 
-      // ✅ RECUPERA INFO REALI DEL SERVER
+      // ✅ Test di connessione e recupero info server REALI
       try {
-        // Recupera username reale
+        // 👤 Recupera l'utente reale connesso
         const whoamiResult = await invoke<string>("execute_ssh_command", {
           sessionId: sshSessionId,
           command: "whoami"
         });
-        const realUsername = whoamiResult.trim();
-        terminalInstance.writeln(`👤 Utente connesso: ${realUsername}`);
+        const actualUsername = whoamiResult.trim();
+        terminalInstance.writeln(`👤 Utente connesso: ${actualUsername}`);
+        setRealUsername(actualUsername); // ✅ Salva l'utente reale
 
-        // Recupera hostname reale del server
+        // 🏠 Recupera il vero hostname del server
         const hostnameResult = await invoke<string>("execute_ssh_command", {
           sessionId: sshSessionId,
           command: "hostname"
         });
-        const realHostname = hostnameResult.trim();
-        terminalInstance.writeln(`🏠 Hostname server: ${realHostname}`);
-
-        // ✅ SALVA LE INFO REALI DEL SERVER
-        setServerInfo({
-          hostname: realHostname,
-          username: realUsername
-        });
+        const serverHostname = hostnameResult.trim();
+        
+        // ✅ Aggiorna il nome del server per il prompt E il titolo
+        if (serverHostname && serverHostname !== selectedServer.name) {
+          terminalInstance.writeln(`🏠 Hostname server: ${serverHostname}`);
+          setRealHostname(serverHostname); // ✅ Salva il vero hostname
+        }
 
         // ✅ Configura alias utili (come ll)
         try {
@@ -281,7 +271,8 @@ const TerminalComponent: React.FC = () => {
       setTerm(null);
     }
     setIsTerminalReady(false);
-    setServerInfo(null); // ✅ Reset info server quando chiudiamo
+    setRealHostname(null); // ✅ Reset hostname quando chiudiamo
+    setRealUsername(null); // ✅ Reset username quando chiudiamo
     toggleTerminal();
   };
 
@@ -293,10 +284,9 @@ const TerminalComponent: React.FC = () => {
     return null;
   }
 
-  // ✅ MOSTRA IL VERO HOSTNAME NELL'HEADER DEL TERMINALE
-  const displayName = serverInfo 
-    ? `${serverInfo.username}@${serverInfo.hostname}` 
-    : `${selectedServer.sshUser}@${selectedServer.name}`;
+  // ✅ Usa i valori reali se disponibili per il titolo
+  const displayUsername = realUsername || selectedServer.sshUser;
+  const displayHostname = realHostname || selectedServer.name;
 
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-600 z-50 shadow-2xl">
@@ -307,7 +297,8 @@ const TerminalComponent: React.FC = () => {
           <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
           <div className="w-3 h-3 bg-green-500 rounded-full"></div>
           <span className="ml-4 font-mono">
-            Terminal - {displayName} ({selectedServer.ip})
+            {/* ✅ Usa hostname e username REALI nel titolo */}
+            Terminal - {displayUsername}@{displayHostname} ({selectedServer.ip})
           </span>
           {isTerminalReady && (
             <span className="ml-2 text-green-400 text-xs">● CONNESSO</span>
