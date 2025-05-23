@@ -45,7 +45,7 @@ const ServerSidebar: React.FC = () => {
   };
 
   return (
-    <div className="fixed top-1/2 right-6 -translate-y-1/2 w-80 bg-card shadow-xl border border-border rounded-2xl p-4 z-50">
+    <div className="w-full bg-card shadow-xl border border-border rounded-2xl p-4 mt-20">
       <h3 className="text-lg font-medium mb-4">{selectedServer.name}</h3>
 
       <div className="text-sm text-muted-foreground mb-4">

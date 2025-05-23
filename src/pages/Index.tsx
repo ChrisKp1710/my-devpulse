@@ -1,4 +1,3 @@
-// index.tsx
 import Navbar from '../components/Navbar'
 import ServerList from '../components/ServerList'
 import ServerSidebar from '../components/ServerSidebar'
@@ -11,24 +10,22 @@ const Layout = () => {
   const { terminalVisible, selectedServer } = useServer()
 
   return (
-    <div className="min-h-screen bg-background flex flex-col relative">
+    <div className="min-h-screen bg-background flex flex-col">
       <Navbar />
 
-      <div className="flex-1 relative px-6 py-4">
-        {/* Bottoni azione server in alto a destra */}
-        <ServerActions />
-
-        {/* Lista server con padding solo se sidebar attiva */}
-        <div
-          className={`transition-all duration-300 ${
-            selectedServer ? 'pr-[350px]' : 'pr-0'
-          }`}
-        >
+      <div className="flex-1 relative px-6 py-4 flex">
+        {/* Lista server (occupa tutto se la sidebar è chiusa) */}
+        <div className={`flex-1 transition-all duration-300`}>
+          <ServerActions />
           <ServerList />
         </div>
 
-        {/* Sidebar flottante */}
-        {selectedServer && <ServerSidebar />}
+        {/* Sidebar (visibile solo se selezionato un server) */}
+        {selectedServer && (
+          <div className="w-[350px] ml-6 shrink-0">
+            <ServerSidebar />
+          </div>
+        )}
       </div>
 
       {terminalVisible && <Terminal />}
