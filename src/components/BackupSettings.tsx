@@ -11,8 +11,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
-import { open } from "@tauri-apps/plugin-dialog";
-import { readTextFile } from "@tauri-apps/plugin-fs";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { invoke } from "@tauri-apps/api/core";
 import { DownloadCloud, Upload } from "lucide-react";
 
@@ -20,16 +20,16 @@ const BackupSettings: React.FC = () => {
   const handleExportServers = async () => {
     try {
       const jsonData = await invoke<string>("export_servers_json");
-      const blob = new Blob([jsonData], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `devpulse-servers-${new Date().toISOString().split("T")[0]}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
+  
+      const filePath = await save({
+        defaultPath: `devpulse-servers-${new Date().toISOString().split("T")[0]}.json`,
+        filters: [{ name: "JSON Files", extensions: ["json"] }],
+      });
+  
+      if (!filePath) return; // user cancelled
+  
+      await writeTextFile(filePath, jsonData);
+  
       toast({
         title: "✅ Export completed",
         description: "Server configurations exported successfully.",

@@ -33,5 +33,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+"plugins": {
+  "dialog": {
+    "enabled": true
+  },
+  "fs": {
+    "enabled": true
   }
+}
 }

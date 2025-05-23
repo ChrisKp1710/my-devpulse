@@ -316,10 +316,10 @@ fn main() {
             start_ssh_session,
             execute_ssh_command,
             close_ssh_session,
-            ping_server,        // ✅ NUOVO
-            ping_all_servers,   // ✅ NUOVO
-            export_servers_json,  // ✅ AGGIUNTO
-            import_servers_json 
+            ping_server,
+            ping_all_servers,
+            export_servers_json,
+            import_servers_json
         ])
         .run(tauri::generate_context!())
         .expect("Errore durante l'avvio dell'app");
