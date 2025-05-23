@@ -78,7 +78,7 @@ const Settings: React.FC = () => {
   const { setServers } = useServer();
   
   // Theme settings
-  const [, setThemeMode] = useState("dark");
+  const [themeMode, setThemeMode] = useState("dark");
   const [selectedPreset, setSelectedPreset] = useState("Default");
   const [customTheme, setCustomTheme] = useState({
     primary: "#3b82f6",
@@ -419,7 +419,25 @@ const Settings: React.FC = () => {
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <div className="space-y-4">
-
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-medium">Theme Mode</h3>
+                      <Separator />
+                      
+                      <div className="grid grid-cols-3 gap-4">
+                        <div onClick={() => setThemeMode("light")} className={`cursor-pointer rounded-lg p-4 border ${themeMode === "light" ? "border-primary ring-2 ring-primary" : "border-border"}`}>
+                          <div className="aspect-video bg-white rounded-md mb-2"></div>
+                          <p className="text-center font-medium">Light</p>
+                        </div>
+                        <div onClick={() => setThemeMode("dark")} className={`cursor-pointer rounded-lg p-4 border ${themeMode === "dark" ? "border-primary ring-2 ring-primary" : "border-border"}`}>
+                          <div className="aspect-video bg-slate-800 rounded-md mb-2"></div>
+                          <p className="text-center font-medium">Dark</p>
+                        </div>
+                        <div onClick={() => setThemeMode("system")} className={`cursor-pointer rounded-lg p-4 border ${themeMode === "system" ? "border-primary ring-2 ring-primary" : "border-border"}`}>
+                          <div className="aspect-video bg-gradient-to-r from-white to-slate-800 rounded-md mb-2"></div>
+                          <p className="text-center font-medium">System</p>
+                        </div>
+                      </div>
+                    </div>
                       <h3 className="text-lg font-medium">Theme Presets</h3>
                       <Separator />
                       
