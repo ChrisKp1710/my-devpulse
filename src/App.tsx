@@ -3,37 +3,35 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, Routes, Route } from "react-router-dom";
+import { ThemeProvider } from "next-themes";
+import Navbar from "@/components/Navbar";
 import Index from "./pages/Index";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
+import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getName } from "@tauri-apps/api/app";
-import { useEffect } from "react";
-import { ThemeProvider } from "next-themes";
 
 const queryClient = new QueryClient();
 
-// Componente per i test iniziali di Tauri
 const TauriInitializer = () => {
   useEffect(() => {
-    // Test iniziale per verificare che le API Tauri funzionino
     const testTauriAPIs = async () => {
       try {
-        // Test del comando greet
         const greeting = await invoke("greet", { name: "Christian" });
         console.log("🎉", greeting);
 
-        // Test del nome dell'app
         const appName = await getName();
         console.log("✅ Ambiente Tauri rilevato:", appName);
       } catch (error) {
-        console.warn("❌ Errore nell'inizializzazione Tauri:", error);
+        console.warn("❌ Errore Tauri:", error);
       }
     };
 
     testTauriAPIs();
   }, []);
 
-  return null; // Non renderizza nulla
+  return null;
 };
 
 const App = () => (
@@ -44,11 +42,16 @@ const App = () => (
         <Toaster />
         <Sonner />
         <HashRouter>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <div className="min-h-screen flex flex-col bg-background">
+            <Navbar />
+            <div className="flex-1 px-6 py-4">
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </div>
+          </div>
         </HashRouter>
       </TooltipProvider>
     </ThemeProvider>
