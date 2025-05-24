@@ -10,62 +10,52 @@ const TerminalComponent: React.FC = () => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const [term, setTerm] = useState<Terminal | null>(null);
   const [fitAddon, setFitAddon] = useState<FitAddon | null>(null);
-  const [currentPath, setCurrentPath] = useState<string>("~");
   const [isTerminalReady, setIsTerminalReady] = useState(false);
+  const [realUsername, setRealUsername] = useState<string | null>(null);
+  const [realHostname, setRealHostname] = useState<string | null>(null);
   const { selectedServer, sshSessionId, toggleTerminal } = useServer();
 
-  // Stato per salvare il vero hostname del server
-  const [realHostname, setRealHostname] = useState<string | null>(null);
-  const [realUsername, setRealUsername] = useState<string | null>(null);
-
-  // Funzione per mostrare il prompt con valori specifici
-  const showPromptWithValues = useCallback((terminal: Terminal, username?: string, hostname?: string, path?: string) => {
-    const user = username || realUsername || selectedServer?.sshUser || "user";
-    const host = hostname || realHostname || selectedServer?.name || "server";
-    const currentDir = path || currentPath || "~";
-    terminal.write(`\r\n\x1b[32m${user}@${host}\x1b[0m:\x1b[34m${currentDir}\x1b[0m$ `);
-  }, [selectedServer?.sshUser, selectedServer?.name, currentPath, realHostname, realUsername]);
-
-  // Funzione per inizializzare il terminale in modo sicuro
+  // Funzione per inizializzare il terminale REALE e INTERATTIVO
   const initializeTerminal = useCallback(async () => {
     if (!selectedServer || !sshSessionId || !terminalRef.current || term) {
       return;
     }
 
-    console.log("🖥️ Inizializzazione terminale sicura per:", selectedServer.name);
+    console.log("🖥️ Inizializzazione terminale INTERATTIVO per:", selectedServer.name);
 
     try {
-      // Crea il terminale con configurazione più conservativa
+      // Crea il terminale con configurazione per PTY reale
       const terminalInstance = new Terminal({
-        fontFamily: '"Monaco", "Menlo", "Ubuntu Mono", monospace',
-        fontSize: 13,
+        fontFamily: '"Monaco", "Menlo", "Ubuntu Mono", "Consolas", monospace',
+        fontSize: 14,
         lineHeight: 1.2,
         cursorBlink: true,
         cursorStyle: "block",
         convertEol: true,
         disableStdin: false,
+        allowProposedApi: true, // Per funzionalità avanzate
         theme: {
-          background: "#1a1a1a",
-          foreground: "#ffffff",
-          cursor: "#ffffff",
+          background: "#0C0C0C", // Windows Terminal style
+          foreground: "#CCCCCC",
+          cursor: "#FFFFFF",
           cursorAccent: "#000000",
           selectionBackground: "#3b82f6",
-          black: "#000000",
-          red: "#ff5555",
-          green: "#50fa7b",
-          yellow: "#f1fa8c",
-          blue: "#bd93f9",
-          magenta: "#ff79c6",
-          cyan: "#8be9fd",
-          white: "#bfbfbf",
-          brightBlack: "#4d4d4d",
-          brightRed: "#ff6e67",
-          brightGreen: "#5af78e",
-          brightYellow: "#f4f99d",
-          brightBlue: "#caa9fa",
-          brightMagenta: "#ff92d0",
-          brightCyan: "#9aedfe",
-          brightWhite: "#e6e6e6"
+          black: "#0C0C0C",
+          red: "#C50F1F",
+          green: "#13A10E",
+          yellow: "#C19C00",
+          blue: "#0037DA",
+          magenta: "#881798",
+          cyan: "#3A96DD",
+          white: "#CCCCCC",
+          brightBlack: "#767676",
+          brightRed: "#E74856",
+          brightGreen: "#16C60C",
+          brightYellow: "#F9F1A5",
+          brightBlue: "#3B78FF",
+          brightMagenta: "#B4009E",
+          brightCyan: "#61D6D6",
+          brightWhite: "#F2F2F2"
         },
         rows: 30,
         cols: 120,
@@ -81,7 +71,7 @@ const TerminalComponent: React.FC = () => {
       terminalInstance.open(terminalRef.current);
 
       // Aspetta che il terminale sia completamente renderizzato
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise(resolve => setTimeout(resolve, 300));
 
       console.log("📐 Tentativo fit terminale...");
       
@@ -99,7 +89,7 @@ const TerminalComponent: React.FC = () => {
           console.warn(`⚠️ Tentativo fit ${fitAttempts} fallito:`, error);
           
           if (fitAttempts < maxFitAttempts) {
-            setTimeout(attemptFit, 100 * fitAttempts); // Backoff incrementale
+            setTimeout(attemptFit, 100 * fitAttempts);
           } else {
             console.warn("⚠️ Fit fallito dopo", maxFitAttempts, "tentativi. Continuo senza fit.");
             setIsTerminalReady(true);
@@ -112,136 +102,92 @@ const TerminalComponent: React.FC = () => {
       setTerm(terminalInstance);
       setFitAddon(fitAddonInstance);
 
-      // Messaggio di benvenuto
-      terminalInstance.writeln("\r\n🔗 Connessione SSH REALE stabilita!");
-      terminalInstance.writeln(`📡 Server: ${selectedServer.name} (${selectedServer.ip})`);
-      terminalInstance.writeln(`🔑 Sessione: ${sshSessionId}`);
-      terminalInstance.writeln("\r\n🚀 Terminale pronto per i comandi SSH!");
-
-      // Variabili per i valori reali
-      let actualUsername = selectedServer.sshUser;
-      let serverHostname = selectedServer.name;
-
-      // ✅ Test di connessione e recupero info server REALI
+      // ✅ AVVIA SHELL INTERATTIVA REALE
       try {
-        // 👤 Recupera l'utente reale connesso
-        const whoamiResult = await invoke<string>("execute_ssh_command", {
-          sessionId: sshSessionId,
-          command: "whoami"
-        });
-        actualUsername = whoamiResult.trim();
-        terminalInstance.writeln(`👤 Utente connesso: ${actualUsername}`);
-        setRealUsername(actualUsername); // ✅ Salva l'utente reale
-
-        // 🏠 Recupera il vero hostname del server
-        const hostnameResult = await invoke<string>("execute_ssh_command", {
-          sessionId: sshSessionId,
-          command: "hostname"
-        });
-        serverHostname = hostnameResult.trim();
+        console.log("🚀 Avvio shell interattiva...");
         
-        // ✅ Aggiorna il nome del server per il prompt E il titolo
-        if (serverHostname && serverHostname !== selectedServer.name) {
-          terminalInstance.writeln(`🏠 Hostname server: ${serverHostname}`);
-          setRealHostname(serverHostname); // ✅ Salva il vero hostname
-        }
+        // Avvia una shell interattiva con PTY
+        await invoke("start_interactive_shell", {
+          sessionId: sshSessionId,
+          terminalCols: terminalInstance.cols,
+          terminalRows: terminalInstance.rows
+        });
 
-        // ✅ Configura alias utili (come ll)
+        console.log("✅ Shell interattiva avviata");
+
+        // Recupera informazioni server in background
         try {
-          await invoke<string>("execute_ssh_command", {
+          const whoamiResult = await invoke<string>("execute_ssh_command", {
             sessionId: sshSessionId,
-            command: "alias ll='ls -la'"
+            command: "whoami"
           });
-          terminalInstance.writeln(`🔧 Alias configurati: ll='ls -la'`);
+          setRealUsername(whoamiResult.trim());
+
+          const hostnameResult = await invoke<string>("execute_ssh_command", {
+            sessionId: sshSessionId,
+            command: "hostname"
+          });
+          setRealHostname(hostnameResult.trim());
         } catch (error) {
-          console.warn("⚠️ Errore configurazione alias:", error);
+          console.warn("⚠️ Errore recupero info server:", error);
         }
-      } catch (error) {
-        console.warn("⚠️ Test connessione fallito:", error);
-      }
 
-      // ✅ PROMPT con valori reali (usando le variabili locali, non gli stati)
-      showPromptWithValues(terminalInstance, actualUsername, serverHostname, currentPath);
+        // ✅ GESTIONE INPUT/OUTPUT REALE
+        terminalInstance.onData(async (data) => {
+          try {
+            // Invia DIRETTAMENTE tutti i dati alla shell remota
+            await invoke("send_to_shell", {
+              sessionId: sshSessionId,
+              data: data
+            });
+          } catch (error) {
+            console.error("❌ Errore invio dati:", error);
+          }
+        });
 
-      let currentCommand = "";
-
-      // Gestione input migliorata
-      const handleData = async (data: string) => {
-        const code = data.charCodeAt(0);
-
-        if (code === 13) { // Enter
-          terminalInstance.write("\r\n");
-          
-          if (currentCommand.trim()) {
-            const command = currentCommand.trim();
-            terminalInstance.writeln(`> Esecuzione: ${command}`);
+        // ✅ POLLING OUTPUT DALLA SHELL
+        const pollShellOutput = async () => {
+          try {
+            const output = await invoke<string>("read_shell_output", {
+              sessionId: sshSessionId
+            });
             
-            try {
-              const result = await invoke<string>("execute_ssh_command", {
-                sessionId: sshSessionId,
-                command: command
-              });
-              
-              if (result.trim()) {
-                terminalInstance.writeln(result);
-              }
-              
-              // Gestione cambio directory
-              if (command.startsWith("cd ")) {
-                try {
-                  const pwdResult = await invoke<string>("execute_ssh_command", {
-                    sessionId: sshSessionId,
-                    command: "pwd"
-                  });
-                  setCurrentPath(pwdResult.trim());
-                } catch (error) {
-                  console.warn("⚠️ Errore aggiornamento path:", error);
-                }
-              }
-            } catch (error) {
-              terminalInstance.writeln(`\x1b[31m❌ Errore: ${error}\x1b[0m`);
+            if (output && output.length > 0) {
+              terminalInstance.write(output);
             }
+          } catch {
+            // Silenzioso - può essere normale se non c'è output
           }
-          
-          currentCommand = "";
-          // ✅ Usa sempre i valori reali se disponibili per il nuovo prompt
-          showPromptWithValues(terminalInstance, actualUsername, serverHostname);
-        } else if (code === 127) { // Backspace
-          if (currentCommand.length > 0) {
-            currentCommand = currentCommand.slice(0, -1);
-            terminalInstance.write("\b \b");
+        };
+
+        // Polling ogni 50ms per output fluido
+        const outputInterval = setInterval(pollShellOutput, 50);
+
+        // Cleanup function
+        return () => {
+          console.log("🧹 Pulizia terminale");
+          clearInterval(outputInterval);
+          try {
+            terminalInstance.dispose();
+          } catch (error) {
+            console.warn("⚠️ Errore durante dispose:", error);
           }
-        } else if (code === 3) { // Ctrl+C
-          terminalInstance.writeln("\r\n^C");
-          currentCommand = "";
-          showPromptWithValues(terminalInstance, actualUsername, serverHostname);
-        } else if (code >= 32) { // Caratteri stampabili
-          currentCommand += data;
-          terminalInstance.write(data);
-        }
-      };
+        };
 
-      terminalInstance.onData(handleData);
-
-      // Cleanup function
-      return () => {
-        console.log("🧹 Pulizia terminale");
-        try {
-          terminalInstance.dispose();
-        } catch (error) {
-          console.warn("⚠️ Errore durante dispose:", error);
-        }
-      };
+      } catch (error) {
+        console.error("❌ Errore avvio shell interattiva:", error);
+        terminalInstance.writeln("\r\n❌ Errore: Impossibile avviare shell interattiva");
+        terminalInstance.writeln("Controlla la connessione SSH e riprova.");
+      }
 
     } catch (error) {
       console.error("❌ Errore critico inizializzazione terminale:", error);
     }
-  }, [selectedServer, sshSessionId, term, showPromptWithValues, currentPath]);
+  }, [selectedServer, sshSessionId, term]);
 
   // Effect per inizializzare il terminale
   useEffect(() => {
     if (selectedServer && sshSessionId && terminalRef.current && !term) {
-      // Delay per assicurarsi che il DOM sia pronto
       const timer = setTimeout(() => {
         initializeTerminal();
       }, 100);
@@ -257,6 +203,14 @@ const TerminalComponent: React.FC = () => {
         try {
           setTimeout(() => {
             fitAddon.fit();
+            // Notifica resize al server
+            if (sshSessionId) {
+              invoke("resize_shell", {
+                sessionId: sshSessionId,
+                cols: term.cols,
+                rows: term.rows
+              }).catch(console.warn);
+            }
           }, 50);
         } catch (error) {
           console.warn("⚠️ Errore durante resize:", error);
@@ -266,11 +220,15 @@ const TerminalComponent: React.FC = () => {
 
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, [fitAddon, term, isTerminalReady]);
+  }, [fitAddon, term, isTerminalReady, sshSessionId]);
 
   const handleClose = async () => {
     if (term) {
       try {
+        // Chiudi la shell interattiva
+        if (sshSessionId) {
+          await invoke("stop_interactive_shell", { sessionId: sshSessionId });
+        }
         term.dispose();
       } catch (error) {
         console.warn("⚠️ Errore chiusura terminale:", error);
@@ -278,8 +236,8 @@ const TerminalComponent: React.FC = () => {
       setTerm(null);
     }
     setIsTerminalReady(false);
-    setRealHostname(null); // ✅ Reset hostname quando chiudiamo
-    setRealUsername(null); // ✅ Reset username quando chiudiamo
+    setRealHostname(null);
+    setRealUsername(null);
     toggleTerminal();
   };
 
@@ -291,7 +249,7 @@ const TerminalComponent: React.FC = () => {
     return null;
   }
 
-  // ✅ Usa i valori reali se disponibili per il titolo
+  // Display info for title
   const displayUsername = realUsername || selectedServer.sshUser;
   const displayHostname = realHostname || selectedServer.name;
 
@@ -304,11 +262,10 @@ const TerminalComponent: React.FC = () => {
           <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
           <div className="w-3 h-3 bg-green-500 rounded-full"></div>
           <span className="ml-4 font-mono">
-            {/* ✅ Usa hostname e username REALI nel titolo */}
             Terminal - {displayUsername}@{displayHostname} ({selectedServer.ip})
           </span>
           {isTerminalReady && (
-            <span className="ml-2 text-green-400 text-xs">● CONNESSO</span>
+            <span className="ml-2 text-green-400 text-xs">● SHELL INTERATTIVA</span>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -335,8 +292,8 @@ const TerminalComponent: React.FC = () => {
           ref={terminalRef} 
           className="h-96 p-3"
           style={{ 
-            background: "#1a1a1a",
-            fontFamily: '"Monaco", "Menlo", "Ubuntu Mono", monospace'
+            background: "#0C0C0C",
+            fontFamily: '"Monaco", "Menlo", "Ubuntu Mono", "Consolas", monospace'
           }}
         />
         
@@ -344,7 +301,7 @@ const TerminalComponent: React.FC = () => {
           <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75">
             <div className="text-white text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
-              <p>Inizializzazione terminale...</p>
+              <p>Avvio shell interattiva...</p>
             </div>
           </div>
         )}

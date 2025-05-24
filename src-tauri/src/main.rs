@@ -4,14 +4,16 @@
 use serde::{Deserialize, Serialize};
 use ssh2::Session;
 use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::fs;
 use std::io::prelude::*;
 use std::net::{TcpStream, SocketAddr};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{command, AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use chrono::Utc;
+use tokio::sync::RwLock;
 
 // 🧱 Definizione della struttura dati Server per la persistenza JSON
 #[derive(Serialize, Deserialize, Debug)]
@@ -57,8 +59,17 @@ pub struct SshSession {
     pub stream: TcpStream,
 }
 
+// ✅ NUOVO: Struttura per gestire shell interattive
+pub struct InteractiveShell {
+    pub channel: ssh2::Channel,
+    pub output_buffer: Arc<RwLock<VecDeque<u8>>>,
+}
+
 // 🧠 Mappa globale delle sessioni attive (gestita con Mutex)
 pub type SshSessions = Mutex<HashMap<String, SshSession>>;
+
+// ✅ NUOVO: Mappa delle shell interattive
+pub type InteractiveShells = Mutex<HashMap<String, InteractiveShell>>;
 
 // 👋 Funzione di esempio
 #[command]
@@ -194,6 +205,154 @@ async fn execute_ssh_command(
         result.push_str(&format!("\n--- EXIT CODE: {} ---", exit_status));
     }
     Ok(result)
+}
+
+// ✅ NUOVO: Avvia una shell interattiva con PTY
+#[command]
+async fn start_interactive_shell(
+    session_id: String,
+    terminal_cols: u32,
+    terminal_rows: u32,
+    ssh_sessions: State<'_, SshSessions>,
+    interactive_shells: State<'_, InteractiveShells>,
+) -> Result<(), String> {
+    println!("🚀 Avvio shell interattiva per sessione: {}", session_id);
+    
+    let mut sessions = ssh_sessions.lock().unwrap();
+    let ssh_session = sessions.get_mut(&session_id)
+        .ok_or_else(|| "Sessione SSH non trovata".to_string())?;
+
+    // Crea un canale con PTY per shell interattiva
+    let mut channel = ssh_session.session.channel_session()
+        .map_err(|e| format!("Errore creazione canale: {}", e))?;
+    
+    // Richiedi PTY (Pseudo Terminal)
+    channel.request_pty("xterm-256color", None, Some((terminal_cols, terminal_rows, 0, 0)))
+        .map_err(|e| format!("Errore richiesta PTY: {}", e))?;
+    
+    // Avvia shell
+    channel.shell()
+        .map_err(|e| format!("Errore avvio shell: {}", e))?;
+
+    // Buffer per l'output
+    let output_buffer = Arc::new(RwLock::new(VecDeque::new()));
+    
+    // Crea la shell interattiva
+    let interactive_shell = InteractiveShell {
+        channel,
+        output_buffer: output_buffer.clone(),
+    };
+
+    // Salva nella mappa delle shell
+    let mut shells = interactive_shells.lock().unwrap();
+    shells.insert(session_id.clone(), interactive_shell);
+
+    println!("✅ Shell interattiva avviata per: {}", session_id);
+    Ok(())
+}
+
+// ✅ NUOVO: Invia dati alla shell
+#[command]
+async fn send_to_shell(
+    session_id: String,
+    data: String,
+    interactive_shells: State<'_, InteractiveShells>,
+) -> Result<(), String> {
+    let mut shells = interactive_shells.lock().unwrap();
+    let shell = shells.get_mut(&session_id)
+        .ok_or_else(|| "Shell interattiva non trovata".to_string())?;
+
+    shell.channel.write_all(data.as_bytes())
+        .map_err(|e| format!("Errore invio dati: {}", e))?;
+    
+    shell.channel.flush()
+        .map_err(|e| format!("Errore flush: {}", e))?;
+
+    Ok(())
+}
+
+// ✅ NUOVO: Leggi output dalla shell - VERSIONE CORRETTA
+#[command]
+async fn read_shell_output(
+    session_id: String,
+    interactive_shells: State<'_, InteractiveShells>,
+) -> Result<String, String> {
+    let mut shells = interactive_shells.lock().unwrap();
+    let shell = shells.get_mut(&session_id)
+        .ok_or_else(|| "Shell interattiva non trovata".to_string())?;
+
+    let mut buffer = [0; 4096];
+    let mut output = String::new();
+    
+    // ✅ CORRETTO: SSH2 non ha set_read_timeout per Channel, usiamo un approccio diverso
+    // Facciamo una lettura con timeout gestito manualmente
+    let mut _total_read = 0; // Prefisso con _ per evitare warning unused
+    const MAX_READ_ATTEMPTS: usize = 10; // Massimo 10 tentativi per evitare loop infiniti
+    
+    for _ in 0..MAX_READ_ATTEMPTS {
+        match shell.channel.read(&mut buffer) {
+            Ok(0) => {
+                // Nessun dato disponibile, usciamo
+                break;
+            }
+            Ok(n) => {
+                let data = String::from_utf8_lossy(&buffer[..n]);
+                output.push_str(&data);
+                _total_read += n;
+                
+                // Se abbiamo letto poco, probabilmente non c'è altro da leggere
+                if n < buffer.len() {
+                    break;
+                }
+            }
+            Err(e) => {
+                // Se è un errore di "would block", non c'è più da leggere
+                if e.kind() == std::io::ErrorKind::WouldBlock {
+                    break;
+                }
+                // Altri errori potrebbero essere seri
+                return Err(format!("Errore lettura: {}", e));
+            }
+        }
+    }
+    
+    Ok(output)
+}
+
+// ✅ NUOVO: Ridimensiona il terminale - VERSIONE CORRETTA
+#[command]
+async fn resize_shell(
+    session_id: String,
+    cols: u32,
+    rows: u32,
+    interactive_shells: State<'_, InteractiveShells>,
+) -> Result<(), String> {
+    let mut shells = interactive_shells.lock().unwrap();
+    let shell = shells.get_mut(&session_id)
+        .ok_or_else(|| "Shell interattiva non trovata".to_string())?;
+
+    // ✅ CORRETTO: request_pty_size richiede Option<u32> per i parametri pixel
+    shell.channel.request_pty_size(cols, rows, Some(0), Some(0))
+        .map_err(|e| format!("Errore resize PTY: {}", e))?;
+
+    println!("🔄 PTY ridimensionato: {}x{} per {}", cols, rows, session_id);
+    Ok(())
+}
+
+// ✅ NUOVO: Ferma shell interattiva
+#[command]
+async fn stop_interactive_shell(
+    session_id: String,
+    interactive_shells: State<'_, InteractiveShells>,
+) -> Result<(), String> {
+    let mut shells = interactive_shells.lock().unwrap();
+    
+    if let Some(mut shell) = shells.remove(&session_id) {
+        let _ = shell.channel.close();
+        println!("🛑 Shell interattiva chiusa per: {}", session_id);
+    }
+    
+    Ok(())
 }
 
 // ❌ Chiude una sessione SSH esistente e la rimuove dal registro
@@ -433,10 +592,12 @@ async fn import_servers_from_file(app: AppHandle) -> Result<usize, String> {
         None => Err("Importazione annullata dall'utente".to_string())
     }
 }
-// 🚀 Inizializzazione dell'app Tauri - ✅ AGGIORNATA
+
+// 🚀 Inizializzazione dell'app Tauri - ✅ AGGIORNATA CON SHELL INTERATTIVA
 fn main() {
     tauri::Builder::default()
         .manage(SshSessions::default())
+        .manage(InteractiveShells::default()) // ✅ AGGIUNTO: Gestione shell interattive
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
@@ -452,7 +613,13 @@ fn main() {
             export_servers_json,
             import_servers_json,
             export_servers_to_file,
-            import_servers_from_file
+            import_servers_from_file,
+            // ✅ NUOVI COMANDI PER SHELL INTERATTIVA
+            start_interactive_shell,
+            send_to_shell,
+            read_shell_output,
+            resize_shell,
+            stop_interactive_shell
         ])
         .run(tauri::generate_context!())
         .expect("Errore durante l'avvio dell'app");
