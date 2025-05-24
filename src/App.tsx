@@ -12,7 +12,8 @@ import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getName } from "@tauri-apps/api/app";
-import { ServerProvider } from "@/context/ServerContext"; // ✅ IMPORTA ServerProvider
+import { ServerProvider } from "@/context/ServerContext";
+import TerminalDrawer from "@/components/TerminalDrawer";
 
 const queryClient = new QueryClient();
 
@@ -56,6 +57,7 @@ const App = () => (
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </div>
+              <TerminalDrawer />
             </div>
           </HashRouter>
         </ServerProvider>

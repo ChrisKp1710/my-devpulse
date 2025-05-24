@@ -1,7 +1,17 @@
-// src/components/ServerSidebar.tsx - VERSIONE AGGIORNATA
+// src/components/ServerSidebar.tsx
 import React, { useState } from 'react';
 import { useServer } from '../context/useServer';
-import { Power, Play, Terminal, Settings, StopCircle, Trash, Wifi, WifiOff, Clock } from 'lucide-react';
+import {
+  Power,
+  Play,
+  Terminal,
+  Settings,
+  StopCircle,
+  Trash,
+  Wifi,
+  WifiOff,
+  Clock,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -12,14 +22,16 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { invoke } from '@tauri-apps/api/core';
+import { useTerminalDrawerStore } from '@/store/useTerminalDrawerStore';
 
 const ServerSidebar: React.FC = () => {
-  const { selectedServer, toggleServerStatus, startSshConnection, removeServer, serverStatuses } = useServer();
-  const [isConnecting, setIsConnecting] = useState(false);
+  const { selectedServer, toggleServerStatus, removeServer, serverStatuses } = useServer();
+  const [isConnecting] = useState(false);
+  const { toggle } = useTerminalDrawerStore();
 
   if (!selectedServer) return null;
 
-  // ✅ Ottieni lo status reale del server dal monitoring
   const serverStatus = serverStatuses[selectedServer.id];
   const isReallyOnline = serverStatus?.isOnline || false;
   const lastChecked = serverStatus?.lastChecked;
@@ -30,15 +42,22 @@ const ServerSidebar: React.FC = () => {
   };
 
   const handleOpenTerminal = async () => {
-    setIsConnecting(true);
+    if (!selectedServer) return;
+
     try {
-      await startSshConnection(selectedServer);
-      toast.success(`✅ Connesso a ${selectedServer.name}`);
+      await invoke('open_terminal', {
+        request: {
+          sshUser: selectedServer.sshUser,
+          ip: selectedServer.ip,
+          sshPort: selectedServer.sshPort,
+          password: null,
+        },
+      });
+
+      toggle(); // ✅ Apri il drawer integrato
     } catch (error) {
-      console.error("❌ Errore connessione:", error);
-      toast.error(`❌ Errore: ${error}`);
-    } finally {
-      setIsConnecting(false);
+      console.error('❌ Errore apertura terminale:', error);
+      toast.error('Errore apertura terminale');
     }
   };
 
@@ -51,13 +70,12 @@ const ServerSidebar: React.FC = () => {
     }
   };
 
-  // ✅ Formatta il tempo dell'ultimo check
   const formatLastChecked = (timestamp: number) => {
     const now = Date.now();
     const diff = now - timestamp;
     const seconds = Math.floor(diff / 1000);
     const minutes = Math.floor(seconds / 60);
-    
+
     if (minutes < 1) return `${seconds}s fa`;
     if (minutes < 60) return `${minutes}m fa`;
     return `${Math.floor(minutes / 60)}h fa`;
@@ -68,7 +86,6 @@ const ServerSidebar: React.FC = () => {
       <h3 className="text-lg font-medium mb-4">{selectedServer.name}</h3>
 
       <div className="text-sm text-muted-foreground mb-4">
-        {/* ✅ Status con indicatore visivo migliorato */}
         <div className="flex items-center gap-2 mb-2">
           <span>Status:</span>
           <div className="flex items-center gap-2">
@@ -86,14 +103,11 @@ const ServerSidebar: React.FC = () => {
           </div>
         </div>
 
-        {/* ✅ Informazioni aggiuntive sul ping */}
         {serverStatus && lastChecked && (
           <div className="flex items-center gap-2 mb-2 text-xs">
             <Clock className="h-3 w-3" />
             <span>Ultimo check: {formatLastChecked(lastChecked)}</span>
-            {responseTime && (
-              <span className="text-green-600">({responseTime}ms)</span>
-            )}
+            {responseTime && <span className="text-green-600">({responseTime}ms)</span>}
           </div>
         )}
 
@@ -125,11 +139,10 @@ const ServerSidebar: React.FC = () => {
         <span>Wake On LAN</span>
       </button>
 
-      {/* ✅ Disabilita il bottone se il server è offline */}
       <button
         className={`sidebar-command mt-4 ${
-          isReallyOnline 
-            ? 'bg-primary text-primary-foreground hover:bg-primary/90' 
+          isReallyOnline
+            ? 'bg-primary text-primary-foreground hover:bg-primary/90'
             : 'bg-muted text-muted-foreground cursor-not-allowed'
         }`}
         onClick={handleOpenTerminal}
@@ -138,12 +151,11 @@ const ServerSidebar: React.FC = () => {
       >
         <Terminal className="h-4 w-4" />
         <span>
-          {isConnecting 
-            ? 'Connecting...' 
-            : !isReallyOnline 
-              ? 'Terminal (Offline)' 
-              : 'Open Terminal'
-          }
+          {isConnecting
+            ? 'Connecting...'
+            : !isReallyOnline
+              ? 'Terminal (Offline)'
+              : 'Open Terminal'}
         </span>
       </button>
 
@@ -154,10 +166,7 @@ const ServerSidebar: React.FC = () => {
 
       <Dialog>
         <DialogTrigger asChild>
-          <Button
-            variant="destructive"
-            className="w-full mt-6 flex justify-center items-center gap-2"
-          >
+          <Button variant="destructive" className="w-full mt-6 flex justify-center items-center gap-2">
             <Trash size={16} />
             Elimina Server
           </Button>
