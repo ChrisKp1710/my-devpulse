@@ -207,7 +207,7 @@ async fn execute_ssh_command(
     Ok(result)
 }
 
-// ✅ NUOVO: Avvia una shell interattiva con PTY
+// ✅ NUOVO: Avvia shell interattiva con PTY - VERSIONE MIGLIORATA
 #[command]
 async fn start_interactive_shell(
     session_id: String,
@@ -226,13 +226,21 @@ async fn start_interactive_shell(
     let mut channel = ssh_session.session.channel_session()
         .map_err(|e| format!("Errore creazione canale: {}", e))?;
     
-    // Richiedi PTY (Pseudo Terminal)
+    // ✅ IMPORTANTE: Configurazione PTY migliorata
     channel.request_pty("xterm-256color", None, Some((terminal_cols, terminal_rows, 0, 0)))
         .map_err(|e| format!("Errore richiesta PTY: {}", e))?;
     
-    // Avvia shell
+    // ✅ IMPORTANTE: Imposta variabili d'ambiente per una shell migliore
+    let _ = channel.setenv("TERM", "xterm-256color");
+    let _ = channel.setenv("COLUMNS", &terminal_cols.to_string());
+    let _ = channel.setenv("LINES", &terminal_rows.to_string());
+    
+    // ✅ IMPORTANTE: Avvia shell
     channel.shell()
         .map_err(|e| format!("Errore avvio shell: {}", e))?;
+
+    // ✅ IMPORTANTE: Aspetta che la shell sia pronta
+    std::thread::sleep(std::time::Duration::from_millis(500));
 
     // Buffer per l'output
     let output_buffer = Arc::new(RwLock::new(VecDeque::new()));
@@ -251,23 +259,32 @@ async fn start_interactive_shell(
     Ok(())
 }
 
-// ✅ NUOVO: Invia dati alla shell
+// ✅ NUOVO: Invia dati alla shell - VERSIONE MIGLIORATA
 #[command]
 async fn send_to_shell(
     session_id: String,
     data: String,
     interactive_shells: State<'_, InteractiveShells>,
 ) -> Result<(), String> {
+    println!("📝 Invio alla shell [{}]: {:?}", session_id, data);
+    
     let mut shells = interactive_shells.lock().unwrap();
     let shell = shells.get_mut(&session_id)
         .ok_or_else(|| "Shell interattiva non trovata".to_string())?;
 
+    // ✅ IMPORTANTE: Scrivi i dati
     shell.channel.write_all(data.as_bytes())
         .map_err(|e| format!("Errore invio dati: {}", e))?;
     
+    // ✅ IMPORTANTE: Flush immediato
     shell.channel.flush()
         .map_err(|e| format!("Errore flush: {}", e))?;
 
+    println!("✅ Dati inviati e flushed correttamente");
+    
+    // ✅ NUOVO: Piccola pausa per permettere al server di processare
+    std::thread::sleep(std::time::Duration::from_millis(10));
+    
     Ok(())
 }
 
@@ -284,25 +301,29 @@ async fn read_shell_output(
     let mut buffer = [0; 4096];
     let mut output = String::new();
     
-    // ✅ CORRETTO: SSH2 non ha set_read_timeout per Channel, usiamo un approccio diverso
-    // Facciamo una lettura con timeout gestito manualmente
-    let mut _total_read = 0; // Prefisso con _ per evitare warning unused
-    const MAX_READ_ATTEMPTS: usize = 10; // Massimo 10 tentativi per evitare loop infiniti
+    // ✅ CORRETTO: Usiamo un loop con timeout per leggere tutto l'output disponibile
+    let start_time = std::time::Instant::now();
+    const TIMEOUT_MS: u64 = 50; // Timeout di 50ms per evitare blocchi
     
-    for _ in 0..MAX_READ_ATTEMPTS {
+    loop {
+        // Controlla timeout
+        if start_time.elapsed().as_millis() > TIMEOUT_MS as u128 {
+            break;
+        }
+        
         match shell.channel.read(&mut buffer) {
             Ok(0) => {
-                // Nessun dato disponibile, usciamo
-                break;
+                // Nessun dato disponibile, aspetta un po' e riprova
+                std::thread::sleep(std::time::Duration::from_millis(1));
+                continue;
             }
             Ok(n) => {
                 let data = String::from_utf8_lossy(&buffer[..n]);
                 output.push_str(&data);
-                _total_read += n;
                 
-                // Se abbiamo letto poco, probabilmente non c'è altro da leggere
-                if n < buffer.len() {
-                    break;
+                // Se abbiamo letto poco, probabilmente non c'è altro
+                if n < 100 {
+                    std::thread::sleep(std::time::Duration::from_millis(1));
                 }
             }
             Err(e) => {
@@ -314,6 +335,24 @@ async fn read_shell_output(
                 return Err(format!("Errore lettura: {}", e));
             }
         }
+        
+        // Se abbiamo già dell'output e non arriva più nulla, usciamo
+        if !output.is_empty() {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+            // Prova un'ultima lettura
+            match shell.channel.read(&mut buffer) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    let data = String::from_utf8_lossy(&buffer[..n]);
+                    output.push_str(&data);
+                }
+            }
+            break;
+        }
+    }
+    
+    if !output.is_empty() {
+        println!("📤 Output letto: {} caratteri", output.len());
     }
     
     Ok(output)
