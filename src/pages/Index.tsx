@@ -1,12 +1,11 @@
 // src/pages/Index.tsx - VERSIONE CORRETTA
 import ServerList from '../components/ServerList';
 import ServerSidebar from '../components/ServerSidebar';
-import Terminal from '../components/Terminal';
 import { useServer } from '../context/useServer';
 import ServerActions from '../components/ServerActions';
 
 const Index = () => {
-  const { terminalVisible, selectedServer } = useServer();
+  const { selectedServer } = useServer();
 
   return (
     <div className="flex-1 relative px-6 py-4 flex">
@@ -28,12 +27,8 @@ const Index = () => {
           <ServerSidebar />
         </div>
       )}
-
-      {/* Terminale */}
-      {terminalVisible && <Terminal />}
     </div>
   );
 };
 
-// ✅ ESPORTA DIRETTAMENTE IL COMPONENTE (senza ServerProvider)
 export default Index;

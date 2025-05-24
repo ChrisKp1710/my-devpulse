@@ -2,6 +2,7 @@ use std::process::{Command, Stdio};
 use tauri::{command, AppHandle, Manager};
 use tauri::path::BaseDirectory;
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalRequest {
