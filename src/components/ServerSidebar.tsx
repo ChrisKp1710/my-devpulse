@@ -1,4 +1,3 @@
-// src/components/ServerSidebar.tsx
 import React, { useState } from 'react';
 import { useServer } from '../context/useServer';
 import {
@@ -50,7 +49,7 @@ const ServerSidebar: React.FC = () => {
           sshUser: selectedServer.sshUser,
           ip: selectedServer.ip,
           sshPort: selectedServer.sshPort,
-          password: null,
+          password: selectedServer.password ?? null,
         },
       });
 

@@ -33,7 +33,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": ["bin/ttyd"]
+    "resources": [
+      "bin/ttyd"
+    ]
   },
   "plugins": {
     "fs": {
