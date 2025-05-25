@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useServer } from '../context/useServer';
 import {
   Power,
@@ -24,11 +24,37 @@ import { Button } from '@/components/ui/button';
 import { invoke } from '@tauri-apps/api/core';
 import { useTerminalDrawerStore } from '@/store/useTerminalDrawerStore';
 
+interface TerminalStatus {
+  is_connected: boolean;
+  message: string;
+}
+
 const ServerSidebar: React.FC = () => {
   const { selectedServer, toggleServerStatus, removeServer, serverStatuses } = useServer();
-  const [isConnecting] = useState(false);
-  const { toggle } = useTerminalDrawerStore();
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [terminalStatus, setTerminalStatus] = useState<TerminalStatus>({ 
+    is_connected: false, 
+    message: "" 
+  });
+  const { open, connect, setConnected } = useTerminalDrawerStore(); // ✅ Rimosso isOpen
 
+  // ✅ SPOSTA useEffect PRIMA del return anticipato
+  useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const status = await invoke<TerminalStatus>('check_terminal_status');
+        setTerminalStatus(status);
+        setConnected(status.is_connected);
+      } catch (error) {
+        console.error('❌ Errore controllo stato terminale:', error);
+        setConnected(false);
+      }
+    };
+    
+    checkStatus();
+  }, [selectedServer, setConnected]);
+
+  // ✅ Return anticipato DOPO gli hooks
   if (!selectedServer) return null;
 
   const serverStatus = serverStatuses[selectedServer.id];
@@ -43,20 +69,37 @@ const ServerSidebar: React.FC = () => {
   const handleOpenTerminal = async () => {
     if (!selectedServer) return;
 
+    setIsConnecting(true);
+    
     try {
-      await invoke('open_terminal', {
-        request: {
-          sshUser: selectedServer.sshUser,
-          ip: selectedServer.ip,
-          sshPort: selectedServer.sshPort,
-          password: selectedServer.password ?? null,
-        },
-      });
+      // ✅ LOGICA INTELLIGENTE
+      if (terminalStatus.is_connected) {
+        // Se già connesso, apri solo il drawer
+        open();
+        toast.success("📺 Terminale riaperto");
+        console.log("🔄 Drawer riaperto - connessione esistente");
+      } else {
+        // Se non connesso, fai nuova connessione
+        console.log("🔌 Avvio nuova connessione SSH...");
+        
+        const result = await invoke<TerminalStatus>('open_terminal', {
+          request: {
+            sshUser: selectedServer.sshUser,
+            ip: selectedServer.ip,
+            sshPort: selectedServer.sshPort,
+            password: selectedServer.password ?? null,
+          },
+        });
 
-      toggle(); // ✅ Apri il drawer integrato
+        setTerminalStatus(result);
+        connect(); // ✅ USA IL NUOVO METODO connect() invece di open()
+        toast.success("✅ " + result.message);
+      }
     } catch (error) {
       console.error('❌ Errore apertura terminale:', error);
-      toast.error('Errore apertura terminale');
+      toast.error('❌ Errore apertura terminale');
+    } finally {
+      setIsConnecting(false);
     }
   };
 
@@ -102,6 +145,14 @@ const ServerSidebar: React.FC = () => {
           </div>
         </div>
 
+        {/* ✅ MOSTRA STATO TERMINALE */}
+        {terminalStatus.is_connected && (
+          <div className="flex items-center gap-2 mb-2 text-xs">
+            <Terminal className="h-3 w-3 text-blue-500" />
+            <span className="text-blue-500">SSH connesso</span>
+          </div>
+        )}
+
         {serverStatus && lastChecked && (
           <div className="flex items-center gap-2 mb-2 text-xs">
             <Clock className="h-3 w-3" />
@@ -138,11 +189,14 @@ const ServerSidebar: React.FC = () => {
         <span>Wake On LAN</span>
       </button>
 
+      {/* ✅ BOTTONE INTELLIGENTE */}
       <button
         className={`sidebar-command mt-4 ${
           isReallyOnline
-            ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-            : 'bg-muted text-muted-foreground cursor-not-allowed'
+            ? terminalStatus.is_connected
+              ? 'bg-blue-600 text-white hover:bg-blue-700' // Già connesso
+              : 'bg-primary text-primary-foreground hover:bg-primary/90' // Non connesso
+            : 'bg-muted text-muted-foreground cursor-not-allowed' // Server offline
         }`}
         onClick={handleOpenTerminal}
         disabled={isConnecting || !isReallyOnline}
@@ -154,7 +208,9 @@ const ServerSidebar: React.FC = () => {
             ? 'Connecting...'
             : !isReallyOnline
               ? 'Terminal (Offline)'
-              : 'Open Terminal'}
+              : terminalStatus.is_connected
+                ? 'Riapri Terminal'  // ✅ TESTO DIVERSO SE GIÀ CONNESSO
+                : 'Open Terminal'}
         </span>
       </button>
 

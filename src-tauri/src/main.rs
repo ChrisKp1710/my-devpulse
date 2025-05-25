@@ -8,7 +8,7 @@ use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 use tauri::{command, AppHandle, Manager};
 use tauri_plugin_fs;
-use terminal::{open_terminal, logout_terminal};
+use terminal::{open_terminal, logout_terminal, check_terminal_status}; 
 
 mod terminal;
 
@@ -127,6 +127,7 @@ fn main() {
             load_servers,
             open_terminal,
             logout_terminal,
+            check_terminal_status,
         ])
         .run(tauri::generate_context!())
         .expect("Errore avvio app");

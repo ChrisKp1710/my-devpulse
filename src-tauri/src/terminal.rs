@@ -3,6 +3,7 @@ use std::sync::Mutex;
 use tauri::{command, AppHandle, Manager};
 use tauri::path::BaseDirectory;
 use once_cell::sync::OnceCell;
+use serde::Serialize;  // ✅ AGGIUNTO
 
 static TERMINAL_PROCESS: OnceCell<Mutex<Option<Child>>> = OnceCell::new();
 
@@ -15,8 +16,35 @@ pub struct TerminalRequest {
     pub password: Option<String>,
 }
 
+// ✅ AGGIUNTO - Struct per le risposte
+#[derive(Serialize)]
+pub struct TerminalStatus {
+    pub is_connected: bool,
+    pub message: String,
+}
+
+// ✅ AGGIUNTO - Funzione mancante
 #[command]
-pub async fn open_terminal(app: AppHandle, request: TerminalRequest) -> Result<(), String> {
+pub fn check_terminal_status() -> TerminalStatus {
+    if let Some(lock) = TERMINAL_PROCESS.get() {
+        let guard = lock.lock().unwrap();
+        if guard.is_some() {
+            return TerminalStatus {
+                is_connected: true,
+                message: "Terminale attivo".to_string(),
+            };
+        }
+    }
+    
+    TerminalStatus {
+        is_connected: false,
+        message: "Nessuna connessione attiva".to_string(),
+    }
+}
+
+// ✅ MODIFICATO - Ora ritorna TerminalStatus invece di ()
+#[command]
+pub async fn open_terminal(app: AppHandle, request: TerminalRequest) -> Result<TerminalStatus, String> {
     let ttyd_path = app
         .path()
         .resolve("bin/ttyd", BaseDirectory::Resource)
@@ -45,10 +73,13 @@ pub async fn open_terminal(app: AppHandle, request: TerminalRequest) -> Result<(
 
     println!("🖥️ Comando: {}", ssh_command);
 
-    // Evita ri-lancio se già attivo
+    // ✅ MIGLIORATO - Controlla se già attivo e ritorna messaggio appropriato
     if let Some(lock) = TERMINAL_PROCESS.get() {
         if lock.lock().unwrap().is_some() {
-            return Ok(()); // Già in esecuzione
+            return Ok(TerminalStatus {
+                is_connected: true,
+                message: "Connessione già attiva".to_string(),
+            });
         }
     }
 
@@ -69,17 +100,34 @@ pub async fn open_terminal(app: AppHandle, request: TerminalRequest) -> Result<(
     let mutex = TERMINAL_PROCESS.get_or_init(|| Mutex::new(None));
     *mutex.lock().unwrap() = Some(child);
 
-    Ok(())
+    println!("✅ Terminal SSH avviato su http://localhost:7681");
+
+    // ✅ MODIFICATO - Ritorna TerminalStatus con successo
+    Ok(TerminalStatus {
+        is_connected: true,
+        message: "Connessione SSH stabilita".to_string(),
+    })
 }
 
+// ✅ MODIFICATO - Ora ritorna TerminalStatus invece di ()
 #[command]
-pub fn logout_terminal() -> Result<(), String> {
+pub fn logout_terminal() -> Result<TerminalStatus, String> {
     if let Some(lock) = TERMINAL_PROCESS.get() {
         let mut guard = lock.lock().unwrap();
         if let Some(mut child) = guard.take() {
             child.kill().map_err(|e| format!("Errore chiusura ttyd: {e}"))?;
             println!("✅ Terminale chiuso.");
+            
+            return Ok(TerminalStatus {
+                is_connected: false,
+                message: "Disconnesso con successo".to_string(),
+            });
         }
     }
-    Ok(())
+    
+    // ✅ MIGLIORATO - Gestisce caso quando non c'è nulla da chiudere
+    Ok(TerminalStatus {
+        is_connected: false,
+        message: "Nessuna connessione da chiudere".to_string(),
+    })
 }
