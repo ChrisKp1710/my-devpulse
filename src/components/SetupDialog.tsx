@@ -1,32 +1,38 @@
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Loader2, CheckCircle2, AlertTriangle, RefreshCw } from "lucide-react";
 import { useEnvironmentCheck } from "@/hooks/useEnvironmentCheck";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react"; // ✅ Aggiunto useCallback
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
-export function SetupDialog() {
+interface SetupDialogProps {
+  onFinish?: () => void;
+}
+
+export function SetupDialog({ onFinish }: SetupDialogProps) {
   const {
     isLoading,
     isInstalling,
-    needsSetup,
     isReady,
     installProgress,
-    installDependencies,
     checkEnvironment,
     systemInfo,
-  } = useEnvironmentCheck();
+  } = useEnvironmentCheck(); // ✅ Rimosso needsSetup non usato
 
   const [forceClose, setForceClose] = useState(false);
-  const show = !forceClose && (isLoading || needsSetup || isInstalling || !isReady);
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  
+  // ✅ CORREZIONE FINALE: La modale rimane sempre aperta finché non clicchi il pulsante
+  const show = !forceClose;
 
-  useEffect(() => {
-    if (!isLoading && needsSetup && !isInstalling) {
-      installDependencies();
-    }
-  }, [isLoading, needsSetup, isInstalling, installDependencies]);
+  // ✅ useCallback per evitare dipendenze nei useEffect
+  const handleClose = useCallback(() => {
+    setForceClose(true);
+    onFinish?.();
+  }, [onFinish]);
 
+  // ✅ Toast di successo quando pronto
   useEffect(() => {
     if (!isInstalling && isReady) {
       toast.success("✅ DevPulse è pronta per l'uso!");
@@ -45,10 +51,32 @@ export function SetupDialog() {
     return <CheckCircle2 className="w-8 h-8 text-green-500 mx-auto" />;
   };
 
+  // ✅ RIMOSSO: Auto-close automatico - ora solo manuale!
+  // La modale rimane aperta finché l'utente non clicca il pulsante
+  
+  // ✅ Quando setup completato, mostra messaggio di successo MA NON chiudere
+  useEffect(() => {
+    if (isReady && !isInstalling && !installProgress.isError) {
+      setShowSuccessMessage(true);
+      // ✅ NON facciamo più auto-close! Solo messaggio di successo
+    }
+  }, [isReady, isInstalling, installProgress.isError]);
+
+  // ✅ Early return DOPO tutti gli hooks
+  if (!systemInfo && isLoading) {
+    return (
+      <Dialog open>
+        <DialogContent className="text-center py-8">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto text-muted-foreground mb-4" />
+          <p className="text-sm text-muted-foreground">Analisi ambiente in corso...</p>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   return (
     <Dialog open={show}>
       <DialogContent className="max-w-md text-center py-6 space-y-5">
-        {/* 🧠 Titolo */}
         <h2 className="text-xl font-bold">
           {installProgress.isError
             ? "Errore durante la configurazione"
@@ -59,7 +87,6 @@ export function SetupDialog() {
 
         {renderIcon()}
 
-        {/* 🖥️ Info sistema */}
         {systemInfo && (
           <div className="text-xs text-muted-foreground flex flex-wrap justify-center gap-2">
             <span>{systemInfo.os_version}</span>
@@ -79,7 +106,6 @@ export function SetupDialog() {
           </div>
         )}
 
-        {/* 📋 Stato avanzamento */}
         <div className="text-sm text-muted-foreground">
           {installProgress.step}
           {installProgress.details && (
@@ -87,7 +113,6 @@ export function SetupDialog() {
           )}
         </div>
 
-        {/* 📊 Barra di progresso */}
         {!installProgress.isError && (
           <div className="w-full h-1.5 bg-gray-200 rounded overflow-hidden">
             <div
@@ -97,7 +122,6 @@ export function SetupDialog() {
           </div>
         )}
 
-        {/* ❌ Errore → Riprova */}
         {installProgress.isError && (
           <div className="pt-3">
             <Button
@@ -114,10 +138,37 @@ export function SetupDialog() {
           </div>
         )}
 
-        {/* ✅ Setup completato → Avvia */}
-        {isReady && !isInstalling && (
-          <div className="pt-4">
-            <Button onClick={() => setForceClose(true)} className="w-full">
+        {showSuccessMessage && isReady && !isInstalling && (
+          <div className="pt-4 space-y-4">
+            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+              <h3 className="text-lg font-semibold text-green-800 dark:text-green-200 mb-2">
+                🎉 Setup completato!
+              </h3>
+              <div className="text-sm text-green-700 dark:text-green-300 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-green-500">✅</span>
+                  <span>ttyd terminal integrato verificato</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-green-500">✅</span>  
+                  <span>sshpass installato e configurato</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-green-500">✅</span>
+                  <span>DevPulse pronta per connessioni SSH</span>
+                </div>
+              </div>
+            </div>
+            
+            <p className="text-sm text-muted-foreground text-center">
+              Tutti i componenti sono stati configurati correttamente. Puoi iniziare a usare DevPulse!
+            </p>
+            
+            <Button
+              onClick={handleClose}
+              className="w-full bg-green-600 hover:bg-green-700 text-white text-base py-3"
+              size="lg"
+            >
               🚀 Inizia a usare DevPulse
             </Button>
           </div>

@@ -8,23 +8,22 @@ use tauri::{command, AppHandle, Manager, Emitter}; // ✅ AGGIUNTO Emitter
 use tauri::path::BaseDirectory;
 use serde::{Serialize, Deserialize};
 use std::thread;
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SystemInfo {
     pub platform: String,           // "macos"
     pub arch: String,               // "aarch64" per M2 Pro
     pub os_version: String,         // "macOS 14.0"
     pub chip: String,               // "Apple M2 Pro"
+    pub mac_model: String,          // "Mac14,9"
     pub supported: bool,            // true se supportato
-    pub has_homebrew: bool,         // se Homebrew è installato
-    pub has_sshpass: bool,          // ⚠️ Quello che serve per il tuo SSH
-    pub ttyd_bundled_path: String,  // Path del tuo ttyd in bin/
-    pub ttyd_bundled_ok: bool,      // Se il tuo ttyd esiste
+    pub has_homebrew: bool,
+    pub has_sshpass: bool,
+    pub ttyd_bundled_path: String,
+    pub ttyd_bundled_ok: bool,
     pub homebrew_path: Option<String>,
-    pub needs_setup: bool,          // Se serve il setup
-    pub ready_for_ssh: bool,        // Se può usare SSH con password
-    pub setup_message: String,      // Messaggio per l'utente
-    pub mac_model: String,         // Modello Mac (es. "MacBookPro21,1")
+    pub needs_setup: bool,
+    pub ready_for_ssh: bool,
+    pub setup_message: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -39,29 +38,22 @@ pub struct InstallProgress {
 #[command]
 pub async fn check_system_info(app: AppHandle) -> Result<SystemInfo, String> {
     println!("🔍 DevPulse System Check...");
-    
+
     let platform = std::env::consts::OS;
     let arch = std::env::consts::ARCH;
     let mac_model = get_mac_model().await;
-    
-    // Rileva dettagli macOS
+    let chip = lookup_chip_from_model(&mac_model);
+
     let os_version = get_macos_version().await;
-    let chip = detect_apple_chip().await;
-    let supported = is_macos_supported(&os_version, &chip);
-    
-    // Verifica Homebrew
+    let supported = is_macos_supported(&chip);
+
     let (has_homebrew, homebrew_path) = check_homebrew().await;
-    
-    // ⚠️ VERIFICA PRINCIPALE: sshpass (per il tuo SSH con password)
     let has_sshpass = command_exists("sshpass").await;
-    
-    // ✅ VERIFICA il tuo ttyd bundled
     let (ttyd_bundled_ok, ttyd_bundled_path) = check_your_bundled_ttyd(&app).await;
-    
-    // Determina stato generale
+
     let needs_setup = !has_sshpass || !ttyd_bundled_ok;
     let ready_for_ssh = has_sshpass && ttyd_bundled_ok;
-    
+
     let setup_message = if ready_for_ssh {
         "🎉 DevPulse è pronto per l'uso!".to_string()
     } else if !ttyd_bundled_ok {
@@ -71,22 +63,22 @@ pub async fn check_system_info(app: AppHandle) -> Result<SystemInfo, String> {
     } else {
         "🔧 Setup richiesto".to_string()
     };
-    
+
     println!("📋 DevPulse Status Report:");
-    println!("   Sistema: {} {} ({})", os_version, chip, arch);
-    println!("   Sistema: {} {} {} ({})", os_version, chip, mac_model, arch);
+    println!("   Sistema: {} • {} • {} • {}", os_version, chip, mac_model, arch);
     println!("   Supportato: {}", supported);
     println!("   Homebrew: {} ({})", has_homebrew, homebrew_path.as_deref().unwrap_or("non trovato"));
-    println!("   {} ttyd bundled: {}", if ttyd_bundled_ok { "✅" } else { "❌" }, ttyd_bundled_path);
-    println!("   {} sshpass: {}", if has_sshpass { "✅" } else { "⚠️" }, if has_sshpass { "Installato" } else { "MANCANTE" });
+    println!("   ttyd bundled: {} ({})", ttyd_bundled_ok, ttyd_bundled_path);
+    println!("   sshpass: {} ", has_sshpass);
     println!("   🎯 SSH ready: {} | Setup needed: {}", ready_for_ssh, needs_setup);
     println!("   💬 {}", setup_message);
-    
+
     Ok(SystemInfo {
         platform: platform.to_string(),
         arch: arch.to_string(),
         os_version,
         chip,
+        mac_model,
         supported,
         has_homebrew,
         has_sshpass,
@@ -96,8 +88,25 @@ pub async fn check_system_info(app: AppHandle) -> Result<SystemInfo, String> {
         needs_setup,
         ready_for_ssh,
         setup_message,
-        mac_model,
     })
+}
+
+fn lookup_chip_from_model(model: &str) -> String {
+    match model {
+        m if m == "Mac14,9" => "Apple M2 Pro".to_string(), // ✅ correzione specifica
+        m if m.starts_with("Mac14") => "Apple M2 Base".to_string(),
+        m if m.starts_with("Mac15") => "Apple M2 Pro/Max".to_string(),
+        m if m.starts_with("Mac16") => "Apple M3".to_string(),
+        m if m.starts_with("Mac17") => "Apple M3 Pro/Max".to_string(),
+        m if m.starts_with("Mac18") => "Apple M4".to_string(),
+        m if m.starts_with("MacBookAir") => "Apple M1/M2 Air".to_string(),
+        m if m.contains("Intel") => "Intel".to_string(),
+        _ => "Apple Silicon".to_string(),
+    }
+}
+
+fn is_macos_supported(chip: &str) -> bool {
+    chip.contains("Apple") || chip.contains("M1") || chip.contains("M2") || chip.contains("M3") || chip.contains("M4")
 }
 
 // ✅ COMANDO: Installa solo sshpass (il tuo ttyd è già pronto)
@@ -248,51 +257,6 @@ async fn get_mac_model() -> String {
     }
 }
 
-async fn detect_apple_chip() -> String {
-    if let Ok(output) = Command::new("sysctl").arg("-n").arg("machdep.cpu.brand_string").output() {
-        let cpu_info = String::from_utf8_lossy(&output.stdout);
-        
-        if cpu_info.contains("Apple") {
-            // Rileva M2 Pro specificamente
-            if let Ok(model_output) = Command::new("sysctl").arg("-n").arg("hw.model").output() {
-                let model_str = String::from_utf8_lossy(&model_output.stdout);
-                let model = model_str.trim();
-                
-                match model {
-                    // M2 Pro/Max (il tuo!)
-                    m if m.contains("MacBookPro21") => "Apple M2 Pro".to_string(),
-                    m if m.contains("Mac15") => "Apple M2 Pro/Max".to_string(),
-                    
-                    // Altri M2
-                    m if m.contains("MacBookPro20") => "Apple M2".to_string(),
-                    m if m.contains("MacBookAir15") => "Apple M2".to_string(),
-                    
-                    // M1 Series
-                    m if m.contains("MacBookPro17") || m.contains("MacBookPro18") => "Apple M1".to_string(),
-                    m if m.contains("Mac13") || m.contains("Mac14") => "Apple M1 Pro/Max".to_string(),
-                    
-                    // M3/M4 Series
-                    m if m.contains("Mac16") || m.contains("Mac17") => "Apple M3".to_string(),
-                    m if m.contains("Mac18") => "Apple M4".to_string(),
-                    
-                    _ if cpu_info.contains("M2") => "Apple M2 Pro".to_string(), // Default M2
-                    _ => "Apple Silicon".to_string(),
-                }
-            } else {
-                "Apple Silicon".to_string()
-            }
-        } else {
-            "Intel".to_string()
-        }
-    } else {
-        "Unknown".to_string()
-    }
-}
-
-fn is_macos_supported(_version: &str, chip: &str) -> bool {
-    // M2 Pro e tutti i chip Apple sono supportati
-    chip.contains("Apple") || chip.contains("M1") || chip.contains("M2") || chip.contains("M3") || chip.contains("M4")
-}
 
 async fn check_homebrew() -> (bool, Option<String>) {
     let possible_paths = [

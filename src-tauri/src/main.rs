@@ -66,6 +66,31 @@ async fn ping_server(host: String, port: u16) -> Result<PingResult, String> {
 }
 
 #[command]
+async fn debug_system_state(app: AppHandle) -> Result<String, String> {
+    use crate::setup::check_system_info;
+    
+    let info = check_system_info(app).await?;
+    let debug_msg = format!(
+        "🔍 DEBUG SYSTEM STATE:\n\
+         - Platform: {}\n\
+         - Needs setup: {}\n\
+         - Ready for SSH: {}\n\
+         - Has sshpass: {}\n\
+         - ttyd bundled OK: {}\n\
+         - Setup message: {}",
+        info.platform,
+        info.needs_setup,
+        info.ready_for_ssh,
+        info.has_sshpass,
+        info.ttyd_bundled_ok,
+        info.setup_message
+    );
+    
+    println!("{}", debug_msg);
+    Ok(debug_msg)
+}
+
+#[command]
 async fn ping_all_servers(app: AppHandle) -> Result<Vec<(String, PingResult)>, String> {
     let servers = load_servers(app).await?;
     let mut results = Vec::new();
@@ -235,6 +260,7 @@ fn main() {
             // 🆕 Funzioni setup (nuovo modulo)
             check_system_info,
             install_sshpass_for_devpulse,
+            debug_system_state,
         ])
         .run(tauri::generate_context!())
         .expect("Errore avvio DevPulse");
