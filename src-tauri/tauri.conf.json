@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "my-devpulse",
-  "version": "0.1.0",
+  "productName": "DevPulse",
+  "version": "1.0.0", 
   "identifier": "com.koscielniakpinto.devpulse",
   "build": {
     "frontendDist": "../dist",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "my-devpulse",
+        "title": "DevPulse - Server Management",
         "width": 1200,
         "height": 800,
         "resizable": true,
@@ -25,7 +25,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["app", "dmg"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -35,11 +35,12 @@
     ],
     "resources": [
       "bin/ttyd"
-    ]
-  },
-  "plugins": {
-    "fs": {
-      "requireLiteralLeadingDot": false
+    ],
+    "macOS": {
+      "frameworks": [],
+      "minimumSystemVersion": "10.15",
+      "signingIdentity": null,
+      "entitlements": null
     }
   }
 }

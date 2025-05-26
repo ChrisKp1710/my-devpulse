@@ -11,7 +11,8 @@
     "fs:allow-read-text-file",
     "fs:allow-appdata-write",
     "fs:allow-appdata-read",
-    "fs:scope-appdata"
+    "fs:scope-appdata",
+    "dialog:default"
   ],
   "platform": {
     "darwin": {
