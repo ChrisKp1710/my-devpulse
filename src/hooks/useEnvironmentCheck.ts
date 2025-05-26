@@ -17,6 +17,7 @@ export interface SystemInfo {
   needs_setup: boolean;
   ready_for_ssh: boolean;
   setup_message: string;
+  mac_model?: string;
 }
 
 export interface InstallProgress {

@@ -24,6 +24,7 @@ pub struct SystemInfo {
     pub needs_setup: bool,          // Se serve il setup
     pub ready_for_ssh: bool,        // Se può usare SSH con password
     pub setup_message: String,      // Messaggio per l'utente
+    pub mac_model: String,         // Modello Mac (es. "MacBookPro21,1")
 }
 
 #[derive(Serialize, Clone)]
@@ -41,6 +42,7 @@ pub async fn check_system_info(app: AppHandle) -> Result<SystemInfo, String> {
     
     let platform = std::env::consts::OS;
     let arch = std::env::consts::ARCH;
+    let mac_model = get_mac_model().await;
     
     // Rileva dettagli macOS
     let os_version = get_macos_version().await;
@@ -72,6 +74,7 @@ pub async fn check_system_info(app: AppHandle) -> Result<SystemInfo, String> {
     
     println!("📋 DevPulse Status Report:");
     println!("   Sistema: {} {} ({})", os_version, chip, arch);
+    println!("   Sistema: {} {} {} ({})", os_version, chip, mac_model, arch);
     println!("   Supportato: {}", supported);
     println!("   Homebrew: {} ({})", has_homebrew, homebrew_path.as_deref().unwrap_or("non trovato"));
     println!("   {} ttyd bundled: {}", if ttyd_bundled_ok { "✅" } else { "❌" }, ttyd_bundled_path);
@@ -93,6 +96,7 @@ pub async fn check_system_info(app: AppHandle) -> Result<SystemInfo, String> {
         needs_setup,
         ready_for_ssh,
         setup_message,
+        mac_model,
     })
 }
 
@@ -235,6 +239,12 @@ async fn get_macos_version() -> String {
             format!("macOS {}", version)
         },
         Err(_) => "macOS Unknown".to_string(),
+    }
+}
+async fn get_mac_model() -> String {
+    match Command::new("sysctl").arg("-n").arg("hw.model").output() {
+        Ok(output) => String::from_utf8_lossy(&output.stdout).trim().to_string(),
+        Err(_) => "Unknown".to_string(),
     }
 }
 

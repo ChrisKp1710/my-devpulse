@@ -1,7 +1,7 @@
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Loader2, CheckCircle2, AlertTriangle, RefreshCw } from "lucide-react";
 import { useEnvironmentCheck } from "@/hooks/useEnvironmentCheck";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +18,8 @@ export function SetupDialog() {
     systemInfo,
   } = useEnvironmentCheck();
 
-  const show = isLoading || needsSetup || isInstalling || !isReady;
+  const [forceClose, setForceClose] = useState(false);
+  const show = !forceClose && (isLoading || needsSetup || isInstalling || !isReady);
 
   useEffect(() => {
     if (!isLoading && needsSetup && !isInstalling) {
@@ -46,8 +47,8 @@ export function SetupDialog() {
 
   return (
     <Dialog open={show}>
-      <DialogContent className="max-w-md text-center py-6 space-y-4">
-        {/* 🧠 Titolo stato */}
+      <DialogContent className="max-w-md text-center py-6 space-y-5">
+        {/* 🧠 Titolo */}
         <h2 className="text-xl font-bold">
           {installProgress.isError
             ? "Errore durante la configurazione"
@@ -58,19 +59,27 @@ export function SetupDialog() {
 
         {renderIcon()}
 
-        {/* ℹ️ Stato tecnico */}
+        {/* 🖥️ Info sistema */}
         {systemInfo && (
-          <div className="text-xs text-muted-foreground">
-            {systemInfo.os_version} • {systemInfo.chip}
+          <div className="text-xs text-muted-foreground flex flex-wrap justify-center gap-2">
+            <span>{systemInfo.os_version}</span>
+            <span>•</span>
+            <span>{systemInfo.chip}</span>
+            {systemInfo.mac_model && (
+              <>
+                <span>•</span>
+                <Badge variant="outline">Modello: {systemInfo.mac_model}</Badge>
+              </>
+            )}
             {systemInfo.supported ? (
-              <Badge variant="default" className="ml-2">Chip supportato</Badge>
+              <Badge variant="default">Chip supportato</Badge>
             ) : (
-              <Badge variant="destructive" className="ml-2">Non supportato</Badge>
+              <Badge variant="destructive">Non supportato</Badge>
             )}
           </div>
         )}
 
-        {/* 📋 Testo avanzamento */}
+        {/* 📋 Stato avanzamento */}
         <div className="text-sm text-muted-foreground">
           {installProgress.step}
           {installProgress.details && (
@@ -78,7 +87,7 @@ export function SetupDialog() {
           )}
         </div>
 
-        {/* 📊 Barra progresso */}
+        {/* 📊 Barra di progresso */}
         {!installProgress.isError && (
           <div className="w-full h-1.5 bg-gray-200 rounded overflow-hidden">
             <div
@@ -88,7 +97,7 @@ export function SetupDialog() {
           </div>
         )}
 
-        {/* 🔁 Bottone retry se errore */}
+        {/* ❌ Errore → Riprova */}
         {installProgress.isError && (
           <div className="pt-3">
             <Button
@@ -101,6 +110,15 @@ export function SetupDialog() {
             >
               <RefreshCw className="w-4 h-4" />
               Riprova
+            </Button>
+          </div>
+        )}
+
+        {/* ✅ Setup completato → Avvia */}
+        {isReady && !isInstalling && (
+          <div className="pt-4">
+            <Button onClick={() => setForceClose(true)} className="w-full">
+              🚀 Inizia a usare DevPulse
             </Button>
           </div>
         )}
