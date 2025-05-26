@@ -14,6 +14,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getName } from "@tauri-apps/api/app";
 import { ServerProvider } from "@/context/ServerContext";
 import TerminalDrawer from "@/components/TerminalDrawer";
+import { SetupDialog } from "@/components/SetupDialog";
 
 const queryClient = new QueryClient();
 
@@ -44,10 +45,9 @@ const App = () => (
         <TauriInitializer />
         <Toaster />
         <Sonner />
-        
-        {/* ✅ SPOSTA ServerProvider QUI per coprire TUTTA l'app */}
         <ServerProvider>
           <HashRouter>
+            <SetupDialog /> {/* ✅ Mostrato prima di qualsiasi contenuto */}
             <div className="min-h-screen flex flex-col bg-background">
               <Navbar />
               <div className="flex-1 px-6 py-4">

@@ -1,263 +1,111 @@
 #!/bin/bash
-# Script di post-installazione per DevPulse  
-# Eseguito DOPO che l'app è stata copiata in /Applications
+# build-pkg.sh - Script per creare PKG installer DevPulse
+# Posiziona questo file nella ROOT del progetto (stesso livello di package.json)
+# Esegui questo script DOPO aver fatto il build con tauri
 
 set -e
 
-echo "🚀 DevPulse Post-Installation Setup..."
-echo "==============================================="
+echo "🛠️  Creazione PKG installer per DevPulse..."
 
-# Funzioni helper
-detect_arch() {
-    case $(uname -m) in
-        arm64|aarch64) echo "arm64" ;;
-        *) echo "x64" ;;
-    esac
-}
+# Variabili
+APP_NAME="DevPulse"
+APP_VERSION="1.0.0"
+APP_BUNDLE="DevPulse.app"
+PKG_NAME="DevPulse-Installer-v${APP_VERSION}"
+BUILD_DIR="./pkg-build"
+SCRIPTS_DIR="$BUILD_DIR/scripts"
+PAYLOAD_DIR="$BUILD_DIR/payload"
+TAURI_BUILD_DIR="src-tauri/target/release/bundle/macos"
 
-get_user() {
-    if [[ -n "$USER" ]]; then
-        echo "$USER"
-    elif [[ -n "$SUDO_USER" ]]; then
-        echo "$SUDO_USER"
-    else
-        echo $(ls -l /dev/console | awk '{print $3}')
-    fi
-}
-
-check_homebrew() {
-    local user="$1"
-    local home_dir=$(eval echo "~$user")
-    
-    local brew_paths=(
-        "/opt/homebrew/bin/brew"     # Apple Silicon
-        "/usr/local/bin/brew"        # Intel
-        "$home_dir/.homebrew/bin/brew"
-    )
-    
-    for brew_path in "${brew_paths[@]}"; do
-        if [[ -x "$brew_path" ]]; then
-            echo "$brew_path"
-            return 0
-        fi
-    done
-    
-    return 1
-}
-
-show_installation_dialog() {
-    osascript << 'EOF'
-tell application "System Events"
-    display dialog "DevPulse Setup
-
-Per funzionare correttamente, DevPulse ha bisogno di:
-• Homebrew (per gestire dipendenze)
-• sshpass (per connessioni SSH con password)
-
-Questi strumenti verranno installati automaticamente.
-L'installazione potrebbe richiedere alcuni minuti.
-
-Vuoi continuare?" buttons {"Annulla", "Continua"} default button "Continua" with icon note with title "DevPulse Setup"
-    if button returned of result is "Annulla" then
-        error "Installazione annullata dall'utente"
-    end if
-end tell
-EOF
-}
-
-show_progress_dialog() {
-    local message="$1"
-    osascript << EOF
-tell application "System Events"
-    display notification "$message" with title "DevPulse Setup" subtitle "Installazione in corso..."
-end tell
-EOF
-}
-
-show_status_dialog() {
-    local homebrew_status="$1"
-    local sshpass_status="$2"
-    
-    osascript << EOF
-tell application "System Events"
-    display dialog "DevPulse - Stato Dipendenze
-
-🍺 Homebrew: $homebrew_status
-🔐 sshpass: $sshpass_status
-
-Cosa vuoi fare?" buttons {"Esci", "Continua Setup"} default button "Continua Setup" with icon note with title "DevPulse Status Check"
-    if button returned of result is "Esci" then
-        error "Setup annullato dall'utente"
-    end if
-end tell
-EOF
-}
-
-install_homebrew() {
-    local user="$1"
-    local home_dir=$(eval echo "~$user")
-    
-    echo "📦 Installazione Homebrew per $user..."
-    show_progress_dialog "Installazione Homebrew in corso..."
-    
-    sudo -u "$user" /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || {
-        echo "❌ Errore installazione Homebrew"
-        return 1
-    }
-    
-    # Configura PATH per Apple Silicon
-    if [[ $(detect_arch) == "arm64" ]]; then
-        sudo -u "$user" bash -c "echo 'eval \"\$(/opt/homebrew/bin/brew shellenv)\"' >> $home_dir/.zprofile"
-        sudo -u "$user" bash -c "echo 'eval \"\$(/opt/homebrew/bin/brew shellenv)\"' >> $home_dir/.zshrc"
-        sudo -u "$user" bash -c "echo 'eval \"\$(/opt/homebrew/bin/brew shellenv)\"' >> $home_dir/.bash_profile"
-    fi
-    
-    echo "✅ Homebrew installato"
-    show_progress_dialog "✅ Homebrew installato con successo"
-}
-
-install_sshpass() {
-    local brew_cmd="$1"
-    local user="$2"
-    
-    echo "🔐 Installazione sshpass..."
-    show_progress_dialog "Installazione sshpass in corso..."
-    
-    sudo -u "$user" "$brew_cmd" tap esolitos/ipa || {
-        echo "⚠️  Errore tap repository, provo installazione diretta..."
-    }
-    
-    sudo -u "$user" "$brew_cmd" install esolitos/ipa/sshpass || {
-        echo "❌ Errore installazione sshpass"
-        return 1
-    }
-    
-    echo "✅ sshpass installato"
-    show_progress_dialog "✅ sshpass installato con successo"
-}
-
-# === PROCESSO DI SETUP ===
-
-echo "🔍 Rilevamento sistema..."
-ARCH=$(detect_arch)
-CURRENT_USER=$(get_user)
-echo "   Architettura: $ARCH"
-echo "   Utente: $CURRENT_USER"
-
-# 1. Check dello stato attuale
-echo ""
-echo "📋 Verifica stato dipendenze..."
-
-# Check Homebrew
-if BREW_PATH=$(check_homebrew "$CURRENT_USER"); then
-    HOMEBREW_STATUS="✅ Installato ($BREW_PATH)"
-    HAS_HOMEBREW=true
-else
-    HOMEBREW_STATUS="❌ Non trovato"
-    HAS_HOMEBREW=false
-fi
-
-# Check sshpass
-if sudo -u "$CURRENT_USER" command -v sshpass >/dev/null 2>&1; then
-    SSHPASS_STATUS="✅ Installato"
-    HAS_SSHPASS=true
-else
-    SSHPASS_STATUS="❌ Non trovato"
-    HAS_SSHPASS=false
-fi
-
-# 2. Mostra stato e chiedi conferma
-echo "🍺 Homebrew: $HOMEBREW_STATUS"
-echo "🔐 sshpass: $SSHPASS_STATUS"
-
-# Se tutto è già installato, finisci qui
-if [[ "$HAS_HOMEBREW" == true && "$HAS_SSHPASS" == true ]]; then
-    echo ""
-    echo "🎉 TUTTO GIÀ PRONTO!"
-    echo "✅ DevPulse è configurato correttamente"
-    
-    osascript << 'EOF'
-tell application "System Events"
-    display notification "DevPulse è pronto per l'uso!" with title "✅ Setup Completato" subtitle "Tutte le dipendenze sono già installate"
-end tell
-EOF
-    
-    exit 0
-fi
-
-# Altrimenti mostra dialog di conferma
-show_status_dialog "$HOMEBREW_STATUS" "$SSHPASS_STATUS"
-
-# 3. Installa quello che manca
-if [[ "$HAS_HOMEBREW" == false ]]; then
-    echo ""
-    echo "📦 Installazione Homebrew necessaria..."
-    if install_homebrew "$CURRENT_USER"; then
-        sleep 2
-        if BREW_PATH=$(check_homebrew "$CURRENT_USER"); then
-            echo "✅ Homebrew installato: $BREW_PATH"
-            HAS_HOMEBREW=true
-        else
-            echo "❌ Homebrew non disponibile dopo l'installazione"
-            exit 1
-        fi
-    else
-        echo "❌ Errore installazione Homebrew"
-        exit 1
-    fi
-fi
-
-if [[ "$HAS_SSHPASS" == false ]]; then
-    echo ""
-    echo "🔐 Installazione sshpass necessaria..."
-    if install_sshpass "$BREW_PATH" "$CURRENT_USER"; then
-        echo "✅ sshpass installato correttamente"
-        HAS_SSHPASS=true
-    else
-        echo "❌ Errore installazione sshpass"
-        exit 1
-    fi
-fi
-
-# 4. Verifica finale
-echo ""
-echo "🔍 Verifica finale setup..."
-
-if sudo -u "$CURRENT_USER" bash -c "source ~/.zprofile 2>/dev/null || true; command -v sshpass" >/dev/null 2>&1; then
-    echo "✅ sshpass: OK"
-else
-    echo "❌ sshpass non accessibile"
+# Verifica che l'app sia stata compilata
+if [[ ! -d "$TAURI_BUILD_DIR/$APP_BUNDLE" ]]; then
+    echo "❌ App non trovata in $TAURI_BUILD_DIR/$APP_BUNDLE"
+    echo "   Esegui prima: npm run tauri build"
+    echo "   Oppure: npm run tauri:build"
     exit 1
 fi
 
-if [[ -x "/Applications/DevPulse.app/Contents/Resources/bin/ttyd" ]]; then
-    echo "✅ ttyd bundled: OK"
-else
-    echo "⚠️  ttyd bundled non trovato (sarà disponibile al primo avvio)"
+# Verifica che gli script PKG esistano
+if [[ ! -f "src-tauri/scripts/preinstall.sh" ]] || [[ ! -f "src-tauri/scripts/postinstall.sh" ]]; then
+    echo "❌ Script PKG mancanti!"
+    echo "   Assicurati che esistano:"
+    echo "   - src-tauri/scripts/preinstall.sh"
+    echo "   - src-tauri/scripts/postinstall.sh"
+    exit 1
 fi
 
-# 5. Configura permessi applicazione
+# Pulisci e crea directory di build
+echo "🧹 Preparazione directory di build..."
+rm -rf "$BUILD_DIR"
+mkdir -p "$SCRIPTS_DIR"
+mkdir -p "$PAYLOAD_DIR"
+
+# 1. Copia l'app nel payload
+echo "📦 Preparazione payload..."
+cp -R "$TAURI_BUILD_DIR/$APP_BUNDLE" "$PAYLOAD_DIR/"
+
+# Verifica che la copia sia andata a buon fine
+if [[ ! -d "$PAYLOAD_DIR/$APP_BUNDLE" ]]; then
+    echo "❌ Errore nella copia dell'app"
+    exit 1
+fi
+
+# 2. Copia gli script PKG
+echo "📝 Copia script di installazione..."
+cp "src-tauri/scripts/preinstall.sh" "$SCRIPTS_DIR/preinstall"
+cp "src-tauri/scripts/postinstall.sh" "$SCRIPTS_DIR/postinstall"
+
+# 3. Rendi eseguibili gli script
+chmod +x "$SCRIPTS_DIR/preinstall"
+chmod +x "$SCRIPTS_DIR/postinstall"
+
+# 4. Verifica che pkgbuild sia disponibile
+if ! command -v pkgbuild &> /dev/null; then
+    echo "❌ pkgbuild non trovato"
+    echo "   Assicurati di essere su macOS con Xcode Command Line Tools installati"
+    exit 1
+fi
+
+# 5. Crea il PKG
+echo "📦 Creazione PKG..."
+pkgbuild \
+    --root "$PAYLOAD_DIR" \
+    --scripts "$SCRIPTS_DIR" \
+    --identifier "com.koscielniakpinto.devpulse" \
+    --version "$APP_VERSION" \
+    --install-location "/Applications" \
+    "$PKG_NAME.pkg"
+
+# Verifica che il PKG sia stato creato
+if [[ ! -f "$PKG_NAME.pkg" ]]; then
+    echo "❌ Errore nella creazione del PKG"
+    exit 1
+fi
+
+# 6. Pulizia directory temporanea
+echo "🧹 Pulizia..."
+rm -rf "$BUILD_DIR"
+
 echo ""
-echo "🔧 Configurazione DevPulse..."
-chmod +x /Applications/DevPulse.app/Contents/MacOS/* 2>/dev/null || true
-
-# Rimuovi quarantena se presente
-xattr -dr com.apple.quarantine /Applications/DevPulse.app 2>/dev/null || true
-
+echo "🎉 PKG Installer creato con successo!"
+echo "================================================"
+echo "✅ File: $PKG_NAME.pkg"
+echo "✅ Dimensione: $(du -h "$PKG_NAME.pkg" | cut -f1)"
+echo "✅ Posizione: $(pwd)/$PKG_NAME.pkg"
 echo ""
-echo "🎉 INSTALLAZIONE COMPLETATA!"
-echo "=========================================="
-echo "✅ DevPulse installato in /Applications"
-echo "✅ Homebrew configurato"
-echo "✅ sshpass pronto per SSH con password"
-echo "✅ ttyd bundled per terminale integrato"
+echo "📋 L'installer include:"
+echo "   • DevPulse.app → /Applications"
+echo "   • Setup automatico Homebrew"
+echo "   • Installazione automatica sshpass"
+echo "   • Configurazione permessi e quarantena"
+echo "   • Verifica sistema macOS"
 echo ""
-
-# Notifica finale di successo
-osascript << 'EOF'
-tell application "System Events"
-    display notification "DevPulse è stato installato con successo e è pronto per l'uso!" with title "🎉 Installazione Completata" subtitle "Puoi trovare l'app nel Launchpad"
-end tell
-EOF
-
-exit 0
+echo "🚀 Come distribuire:"
+echo "   1. Condividi il file $PKG_NAME.pkg"
+echo "   2. Gli utenti faranno doppio clic"
+echo "   3. Seguiranno la procedura guidata"
+echo "   4. DevPulse sarà pronto con SSH funzionante!"
+echo ""
+echo "⚠️  Nota: Durante l'installazione potrebbe essere richiesta"
+echo "   la password amministratore per installare Homebrew e sshpass"
+echo ""
