@@ -36,9 +36,8 @@ const ServerSidebar: React.FC = () => {
     is_connected: false, 
     message: "" 
   });
-  const { open, connect, setConnected } = useTerminalDrawerStore(); // ✅ Rimosso isOpen
+  const { open, connect, setConnected } = useTerminalDrawerStore();
 
-  // ✅ SPOSTA useEffect PRIMA del return anticipato
   useEffect(() => {
     const checkStatus = async () => {
       try {
@@ -54,7 +53,6 @@ const ServerSidebar: React.FC = () => {
     checkStatus();
   }, [selectedServer, setConnected]);
 
-  // ✅ Return anticipato DOPO gli hooks
   if (!selectedServer) return null;
 
   const serverStatus = serverStatuses[selectedServer.id];
@@ -66,22 +64,48 @@ const ServerSidebar: React.FC = () => {
     toggleServerStatus(selectedServer.id);
   };
 
+  // ✅ FUNZIONE HELPER: Attende che ttyd sia pronto (SENZA variabili non usate)
+  const waitForTerminalReady = async (maxAttempts = 10): Promise<boolean> => {
+    console.log("⏳ Attendendo che ttyd sia pronto...");
+    
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await fetch('http://localhost:7681', { 
+          method: 'HEAD',
+          mode: 'no-cors' 
+        });
+        
+        console.log(`✅ Tentativo ${attempt}: ttyd risponde`);
+        return true;
+      } catch {
+        console.log(`⏳ Tentativo ${attempt}/${maxAttempts}: ttyd non ancora pronto`);
+        
+        if (attempt < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, attempt * 500));
+        }
+      }
+    }
+    
+    console.warn("⚠️ ttyd non è diventato disponibile nei tempi previsti");
+    return false;
+  };
+
   const handleOpenTerminal = async () => {
     if (!selectedServer) return;
 
     setIsConnecting(true);
     
     try {
-      // ✅ LOGICA INTELLIGENTE
       if (terminalStatus.is_connected) {
         // Se già connesso, apri solo il drawer
         open();
         toast.success("📺 Terminale riaperto");
         console.log("🔄 Drawer riaperto - connessione esistente");
       } else {
-        // Se non connesso, fai nuova connessione
+        // ✅ NUOVA LOGICA: Avvia SSH + Attendi che sia pronto + Apri drawer
         console.log("🔌 Avvio nuova connessione SSH...");
         
+        // Step 1: Avvia la connessione SSH
         const result = await invoke<TerminalStatus>('open_terminal', {
           request: {
             sshUser: selectedServer.sshUser,
@@ -91,13 +115,35 @@ const ServerSidebar: React.FC = () => {
           },
         });
 
+        console.log("🚀 SSH avviato:", result.message);
         setTerminalStatus(result);
-        connect(); // ✅ USA IL NUOVO METODO connect() invece di open()
-        toast.success("✅ " + result.message);
+        setConnected(result.is_connected);
+
+        // Step 2: Attendi che ttyd sia effettivamente pronto
+        toast.loading("⏳ Preparazione terminale...", { 
+          id: "terminal-loading",
+          duration: 5000 
+        });
+
+        const isReady = await waitForTerminalReady();
+        
+        // Step 3: Apri il drawer solo quando è pronto
+        if (isReady) {
+          connect(); // Apre il drawer
+          toast.success("✅ " + result.message, { id: "terminal-loading" });
+          console.log("🎉 Terminale pronto e drawer aperto");
+        } else {
+          // Se ttyd non risponde, apri comunque ma avvisa l'utente
+          connect();
+          toast.warning("⚠️ Terminale avviato ma potrebbe essere lento a caricare", { 
+            id: "terminal-loading" 
+          });
+          console.log("⚠️ Terminale aperto ma ttyd potrebbe non essere completamente pronto");
+        }
       }
     } catch (error) {
       console.error('❌ Errore apertura terminale:', error);
-      toast.error('❌ Errore apertura terminale');
+      toast.error('❌ Errore apertura terminale', { id: "terminal-loading" });
     } finally {
       setIsConnecting(false);
     }
@@ -145,7 +191,6 @@ const ServerSidebar: React.FC = () => {
           </div>
         </div>
 
-        {/* ✅ MOSTRA STATO TERMINALE */}
         {terminalStatus.is_connected && (
           <div className="flex items-center gap-2 mb-2 text-xs">
             <Terminal className="h-3 w-3 text-blue-500" />
@@ -189,14 +234,14 @@ const ServerSidebar: React.FC = () => {
         <span>Wake On LAN</span>
       </button>
 
-      {/* ✅ BOTTONE INTELLIGENTE */}
+      {/* ✅ BOTTONE CON STATO AGGIORNATO */}
       <button
         className={`sidebar-command mt-4 ${
           isReallyOnline
             ? terminalStatus.is_connected
-              ? 'bg-blue-600 text-white hover:bg-blue-700' // Già connesso
-              : 'bg-primary text-primary-foreground hover:bg-primary/90' // Non connesso
-            : 'bg-muted text-muted-foreground cursor-not-allowed' // Server offline
+              ? 'bg-blue-600 text-white hover:bg-blue-700'
+              : 'bg-primary text-primary-foreground hover:bg-primary/90'
+            : 'bg-muted text-muted-foreground cursor-not-allowed'
         }`}
         onClick={handleOpenTerminal}
         disabled={isConnecting || !isReallyOnline}
@@ -205,11 +250,11 @@ const ServerSidebar: React.FC = () => {
         <Terminal className="h-4 w-4" />
         <span>
           {isConnecting
-            ? 'Connecting...'
+            ? 'Preparing...'
             : !isReallyOnline
               ? 'Terminal (Offline)'
               : terminalStatus.is_connected
-                ? 'Riapri Terminal'  // ✅ TESTO DIVERSO SE GIÀ CONNESSO
+                ? 'Riapri Terminal'
                 : 'Open Terminal'}
         </span>
       </button>
