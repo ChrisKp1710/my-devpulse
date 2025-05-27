@@ -15,25 +15,46 @@ interface TerminalStatus {
 const TerminalDrawer: React.FC = () => {
   const { isOpen, isConnected, toggle, disconnect } = useTerminalDrawerStore();
   const { selectedServer } = useServer();
-  const [isLoading, setIsLoading] = useState(false); // ✅ Stato di caricamento
-  const [loadError, setLoadError] = useState(false); // ✅ Stato errore
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [iframeKey, setIframeKey] = useState(0); // ✅ Per forzare reload iframe
 
-  // ✅ Gestisce il caricamento dell'iframe
+  // ✅ Loading SOLO per nuove connessioni
   useEffect(() => {
-    if (isOpen && isConnected) {
-      setIsLoading(true);
-      setLoadError(false);
+    if (isConnected && isOpen) {
+      // ✅ Controlla se è una riapertura di connessione esistente
+      const isReconnecting = sessionStorage.getItem('terminal-reconnecting') === 'true';
       
-      // Timeout per il caricamento
-      const loadTimeout = setTimeout(() => {
-        setIsLoading(false);
-        setLoadError(true);
-        console.warn("⚠️ Timeout caricamento terminale");
-      }, 10000); // 10 secondi timeout
+      if (isReconnecting) {
+        // ✅ È una nuova connessione, mostra loading
+        setIsLoading(true);
+        setLoadError(false);
+        sessionStorage.removeItem('terminal-reconnecting'); // Pulisce flag
+        
+        const loadTimeout = setTimeout(() => {
+          console.warn("⚠️ Terminale lento ma funzionante");
+          setIsLoading(false);
+        }, 15000);
 
-      return () => clearTimeout(loadTimeout);
+        const errorTimeout = setTimeout(() => {
+          setLoadError(true);
+          console.error("❌ Timeout definitivo caricamento terminale");
+        }, 30000);
+
+        return () => {
+          clearTimeout(loadTimeout);
+          clearTimeout(errorTimeout);
+        };
+      } else {
+        // ✅ È una riapertura, nessun loading
+        setIsLoading(false);
+        setLoadError(false);
+      }
+    } else {
+      setIsLoading(false);
+      setLoadError(false);
     }
-  }, [isOpen, isConnected]);
+  }, [isConnected, isOpen]);
 
   const handleLogout = async () => {
     try {
@@ -41,6 +62,7 @@ const TerminalDrawer: React.FC = () => {
       disconnect();
       toast.success("💨 " + result.message);
       console.log("🔒 Connessione SSH chiusa completamente");
+      setIframeKey(prev => prev + 1); // ✅ Resetta iframe
     } catch (error) {
       console.error("❌ Errore durante logout:", error);
       toast.error("Errore durante il logout");
@@ -48,29 +70,36 @@ const TerminalDrawer: React.FC = () => {
   };
 
   const handleToggle = () => {
-    if (isOpen) {
-      toggle();
-      console.log("📱 Drawer chiuso - connessione SSH rimane attiva");
-    } else {
-      toggle();
-      console.log("📱 Drawer riaperto");
-    }
+    toggle();
+    console.log(isOpen ? "📱 Drawer chiuso" : "📱 Drawer riaperto");
   };
 
-  // ✅ Gestisce il caricamento dell'iframe
+  // ✅ GESTIONE CARICAMENTO IFRAME più intelligente
   const handleIframeLoad = () => {
-    console.log("✅ iframe terminale caricato correttamente");
+    console.log("✅ iframe terminale caricato");
     setIsLoading(false);
     setLoadError(false);
   };
 
   const handleIframeError = () => {
-    console.error("❌ Errore caricamento iframe terminale");
+    console.error("❌ Errore iframe terminale");
     setIsLoading(false);
     setLoadError(true);
   };
 
-  // ✅ LOGICA DEI 3 STATI
+  // ✅ RETRY più intelligente
+  const handleRetry = () => {
+    console.log("🔄 Retry caricamento terminale");
+    setLoadError(false);
+    setIsLoading(true);
+    setIframeKey(prev => prev + 1); // Forza reload iframe
+    
+    // Nuovo timeout per retry
+    setTimeout(() => {
+      setIsLoading(false);
+    }, 10000);
+  };
+
   const getDrawerState = () => {
     if (!isConnected) {
       return { y: 500, height: 0, visible: false };
@@ -99,8 +128,12 @@ const TerminalDrawer: React.FC = () => {
         <div className="text-sm font-mono flex items-center gap-2">
           {isLoading && <Loader2 className="h-3 w-3 animate-spin" />}
           DevPulse Terminal {selectedServer ? `– ${selectedServer.name}` : ""}
+          {/* ✅ Stato più chiaro */}
+          {isLoading && (
+            <span className="text-blue-400 text-xs">(caricamento)</span>
+          )}
           {loadError && (
-            <span className="text-yellow-400 text-xs">(caricamento lento)</span>
+            <span className="text-yellow-400 text-xs">(ricarica necessaria)</span>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -119,7 +152,7 @@ const TerminalDrawer: React.FC = () => {
           <button 
             onClick={handleToggle} 
             className="hover:bg-gray-800 p-1 rounded"
-            title={isOpen ? "Nascondi terminale (connessione rimane attiva)" : "Mostra terminale"}
+            title={isOpen ? "Nascondi terminale" : "Mostra terminale"}
           >
             {isOpen ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
           </button>
@@ -128,67 +161,52 @@ const TerminalDrawer: React.FC = () => {
 
       {/* Terminal content */}
       <div className="flex-1 bg-black relative">
-        {isOpen && (
-          <>
-            {/* ✅ Loading overlay */}
-            {isLoading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-80 z-10">
-                <div className="text-center">
-                  <Loader2 className="h-8 w-8 animate-spin text-green-500 mx-auto mb-2" />
-                  <p className="text-green-500 text-sm font-mono">
-                    Caricamento terminale...
-                  </p>
-                  <p className="text-gray-400 text-xs font-mono mt-1">
-                    Connessione SSH in corso
-                  </p>
-                </div>
-              </div>
-            )}
+        {/* ✅ Loading overlay SOLO per poco tempo */}
+        {isLoading && isOpen && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-90 z-10">
+            <div className="text-center">
+              <Loader2 className="h-8 w-8 animate-spin text-green-500 mx-auto mb-2" />
+              <p className="text-green-500 text-sm font-mono">
+                Caricamento interfaccia...
+              </p>
+              <p className="text-gray-400 text-xs font-mono mt-1">
+                SSH già connesso, preparazione terminale
+              </p>
+            </div>
+          </div>
+        )}
 
-            {/* ✅ Error overlay */}
-            {loadError && !isLoading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-90 z-10">
-                <div className="text-center">
-                  <p className="text-yellow-400 text-sm font-mono mb-2">
-                    ⚠️ Terminale in caricamento lento
-                  </p>
-                  <p className="text-gray-400 text-xs font-mono">
-                    Se persiste, prova a riavviare la connessione
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-3"
-                    onClick={() => {
-                      setLoadError(false);
-                      setIsLoading(true);
-                      // Forza reload dell'iframe
-                      const iframe = document.querySelector('#terminal-iframe') as HTMLIFrameElement;
-                      if (iframe) {
-                        const currentSrc = iframe.src;
-                        iframe.src = '';
-                        setTimeout(() => {
-                          iframe.src = currentSrc;
-                        }, 100);
-                      }
-                    }}
-                  >
-                    Riprova
-                  </Button>
-                </div>
-              </div>
-            )}
+        {/* ✅ Error overlay SOLO quando necessario */}
+        {loadError && !isLoading && isOpen && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-95 z-10">
+            <div className="text-center">
+              <p className="text-yellow-400 text-sm font-mono mb-2">
+                ⚠️ Interfaccia terminale non risponde
+              </p>
+              <p className="text-gray-400 text-xs font-mono mb-4">
+                SSH funziona, problema con ttyd
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRetry}
+              >
+                🔄 Ricarica Interfaccia
+              </Button>
+            </div>
+          </div>
+        )}
 
-            {/* ✅ Terminal iframe con gestione eventi */}
-            <iframe
-              id="terminal-iframe"
-              src="http://localhost:7681"
-              className="w-full h-full border-none"
-              title="DevPulse Terminal"
-              onLoad={handleIframeLoad}
-              onError={handleIframeError}
-            />
-          </>
+        {/* ✅ Terminal iframe */}
+        {isConnected && (
+          <iframe
+            key={iframeKey} // ✅ Forza reload quando necessario
+            src="http://localhost:7681"
+            className={`w-full h-full border-none ${isOpen ? 'block' : 'hidden'}`}
+            title="DevPulse Terminal"
+            onLoad={handleIframeLoad}
+            onError={handleIframeError}
+          />
         )}
       </div>
     </motion.div>

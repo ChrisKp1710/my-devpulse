@@ -64,86 +64,112 @@ const ServerSidebar: React.FC = () => {
     toggleServerStatus(selectedServer.id);
   };
 
-  // ✅ FUNZIONE HELPER: Attende che ttyd sia pronto (SENZA variabili non usate)
-  const waitForTerminalReady = async (maxAttempts = 10): Promise<boolean> => {
-    console.log("⏳ Attendendo che ttyd sia pronto...");
+  // ✅ NUOVA LOGICA: Più intelligente e veloce
+  const waitForTerminalReady = async (maxAttempts = 15): Promise<boolean> => {
+    console.log("⏳ Verificando disponibilità ttyd...");
     
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
+        // ✅ Usa fetch con timeout più corto
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 1000); // 1 secondo per tentativo
+        
         await fetch('http://localhost:7681', { 
           method: 'HEAD',
-          mode: 'no-cors' 
+          signal: controller.signal,
+          mode: 'no-cors'
         });
         
-        console.log(`✅ Tentativo ${attempt}: ttyd risponde`);
+        clearTimeout(timeoutId);
+        console.log(`✅ Tentativo ${attempt}: ttyd disponibile`);
+        
+        // ✅ Attesa minima solo per i primi tentativi
+        if (attempt <= 3) {
+          await new Promise(resolve => setTimeout(resolve, 200)); // Solo 200ms
+        }
+        
         return true;
       } catch {
-        console.log(`⏳ Tentativo ${attempt}/${maxAttempts}: ttyd non ancora pronto`);
+        console.log(`⏳ Tentativo ${attempt}/${maxAttempts}: ttyd non disponibile`);
         
         if (attempt < maxAttempts) {
-          await new Promise(resolve => setTimeout(resolve, attempt * 500));
+          // ✅ Attesa progressiva ma più veloce
+          const waitTime = Math.min(attempt * 200, 1000); // Max 1 secondo
+          await new Promise(resolve => setTimeout(resolve, waitTime));
         }
       }
     }
     
-    console.warn("⚠️ ttyd non è diventato disponibile nei tempi previsti");
-    return false;
+    console.warn("⚠️ ttyd non disponibile, procedo comunque");
+    return false; // ✅ Non è un errore, procediamo
   };
 
   const handleOpenTerminal = async () => {
     if (!selectedServer) return;
 
+    // ✅ SE GIÀ CONNESSO: Solo riapri drawer, NESSUN caricamento
+    if (terminalStatus.is_connected) {
+      open();
+      toast.success("📺 Terminale riaperto");
+      console.log("🔄 Drawer riaperto - connessione già attiva");
+      return; // ✅ ESCE SUBITO, niente loading
+    }
+
+    // ✅ SOLO per NUOVE connessioni
     setIsConnecting(true);
     
     try {
-      if (terminalStatus.is_connected) {
-        // Se già connesso, apri solo il drawer
-        open();
-        toast.success("📺 Terminale riaperto");
-        console.log("🔄 Drawer riaperto - connessione esistente");
+      console.log("🔌 Avvio nuova connessione SSH...");
+      
+      // ✅ Step 1: Mostra toast di caricamento
+      toast.loading("🔌 Connessione SSH in corso...", { 
+        id: "ssh-connection",
+        duration: Infinity 
+      });
+
+      // ✅ Step 2: Avvia SSH
+      const result = await invoke<TerminalStatus>('open_terminal', {
+        request: {
+          sshUser: selectedServer.sshUser,
+          ip: selectedServer.ip,
+          sshPort: selectedServer.sshPort,
+          password: selectedServer.password ?? null,
+        },
+      });
+
+      console.log("🚀 SSH avviato:", result.message);
+      setTerminalStatus(result);
+      setConnected(result.is_connected);
+
+      // ✅ Step 3: Aggiorna toast - SSH fatto, ora verifica ttyd
+      toast.loading("📺 Preparazione interfaccia terminale...", { 
+        id: "ssh-connection"
+      });
+
+      // ✅ Step 4: Verifica ttyd rapidamente (max 3 secondi)
+      const isReady = await waitForTerminalReady(15); // 15 tentativi = ~3 secondi
+      
+      // ✅ Step 5: Apri drawer sempre - ready o no
+      sessionStorage.setItem('terminal-reconnecting', 'true'); // ✅ Flag per nuova connessione
+      connect();
+      
+      if (isReady) {
+        toast.success("✅ " + result.message, { id: "ssh-connection" });
+        console.log("🎉 Terminale pronto");
       } else {
-        // ✅ NUOVA LOGICA: Avvia SSH + Attendi che sia pronto + Apri drawer
-        console.log("🔌 Avvio nuova connessione SSH...");
-        
-        // Step 1: Avvia la connessione SSH
-        const result = await invoke<TerminalStatus>('open_terminal', {
-          request: {
-            sshUser: selectedServer.sshUser,
-            ip: selectedServer.ip,
-            sshPort: selectedServer.sshPort,
-            password: selectedServer.password ?? null,
-          },
+        // ✅ Non è un errore, solo un avviso
+        toast.success("✅ SSH connesso - terminale in caricamento", { 
+          id: "ssh-connection",
+          description: "L'interfaccia potrebbe impiegare qualche secondo extra"
         });
-
-        console.log("🚀 SSH avviato:", result.message);
-        setTerminalStatus(result);
-        setConnected(result.is_connected);
-
-        // Step 2: Attendi che ttyd sia effettivamente pronto
-        toast.loading("⏳ Preparazione terminale...", { 
-          id: "terminal-loading",
-          duration: 5000 
-        });
-
-        const isReady = await waitForTerminalReady();
-        
-        // Step 3: Apri il drawer solo quando è pronto
-        if (isReady) {
-          connect(); // Apre il drawer
-          toast.success("✅ " + result.message, { id: "terminal-loading" });
-          console.log("🎉 Terminale pronto e drawer aperto");
-        } else {
-          // Se ttyd non risponde, apri comunque ma avvisa l'utente
-          connect();
-          toast.warning("⚠️ Terminale avviato ma potrebbe essere lento a caricare", { 
-            id: "terminal-loading" 
-          });
-          console.log("⚠️ Terminale aperto ma ttyd potrebbe non essere completamente pronto");
-        }
+        console.log("⚠️ SSH OK, ttyd in caricamento");
       }
     } catch (error) {
       console.error('❌ Errore apertura terminale:', error);
-      toast.error('❌ Errore apertura terminale', { id: "terminal-loading" });
+      toast.error('❌ Errore connessione SSH', { 
+        id: "ssh-connection",
+        description: String(error) 
+      });
     } finally {
       setIsConnecting(false);
     }
@@ -234,7 +260,7 @@ const ServerSidebar: React.FC = () => {
         <span>Wake On LAN</span>
       </button>
 
-      {/* ✅ BOTTONE CON STATO AGGIORNATO */}
+      {/* ✅ BOTTONE MIGLIORATO */}
       <button
         className={`sidebar-command mt-4 ${
           isReallyOnline
@@ -250,7 +276,7 @@ const ServerSidebar: React.FC = () => {
         <Terminal className="h-4 w-4" />
         <span>
           {isConnecting
-            ? 'Preparing...'
+            ? 'Connessione...'
             : !isReallyOnline
               ? 'Terminal (Offline)'
               : terminalStatus.is_connected
