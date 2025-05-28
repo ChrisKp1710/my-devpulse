@@ -10,9 +10,11 @@ use tauri::{command, AppHandle, Manager};
 use tauri_plugin_fs;
 use terminal::{open_terminal, logout_terminal, check_terminal_status}; 
 use setup::{check_system_info, install_sshpass_for_devpulse}; // 🆕 Setup module
+use power_management::{wake_server, shutdown_server, test_network_connectivity};
 
 mod terminal;
 mod setup;  // 🆕 Nuovo modulo setup
+mod power_management;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -261,6 +263,11 @@ fn main() {
             check_system_info,
             install_sshpass_for_devpulse,
             debug_system_state,
+
+            // 🆕 Funzioni gestione energia
+            wake_server,
+            shutdown_server, 
+            test_network_connectivity,
         ])
         .run(tauri::generate_context!())
         .expect("Errore avvio DevPulse");

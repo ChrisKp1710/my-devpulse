@@ -3,7 +3,6 @@ use std::net::UdpSocket;
 use std::process::{Command, Stdio};
 use tauri::command;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PowerResult {

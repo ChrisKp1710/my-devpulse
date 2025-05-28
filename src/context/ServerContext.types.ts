@@ -12,4 +12,7 @@ export interface Server {
   authMethod: "password" | "key";
   type: string;
   status: ServerStatus;
+  macAddress?: string;
+  wolEnabled?: boolean;
+  shutdownCommand?: string;
 }
