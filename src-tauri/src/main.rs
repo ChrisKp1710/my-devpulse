@@ -30,6 +30,10 @@ pub struct Server {
     pub ssh_key: String,
     pub server_type: String,
     pub status: String,
+    // ✅ AGGIUNTI: Campi per gestione energia Wake-on-LAN
+    pub mac_address: Option<String>,
+    pub wol_enabled: Option<bool>,
+    pub shutdown_command: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

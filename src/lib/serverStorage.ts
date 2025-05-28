@@ -29,6 +29,9 @@ export const saveServer = async (server: Server): Promise<void> => {
       sshKey: server.sshKey,
       serverType: server.type,
       status: server.status,
+      macAddress: server.macAddress || null,
+      wolEnabled: server.wolEnabled || false,
+      shutdownCommand: server.shutdownCommand || null,
     };
 
     await invoke("save_server", { server: rustServer });

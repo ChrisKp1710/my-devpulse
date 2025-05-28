@@ -10,6 +10,8 @@ import {
   Wifi,
   WifiOff,
   Clock,
+  Zap, // ✅ AGGIUNTO per Wake-on-LAN
+  Edit, // ✅ AGGIUNTO per modifica
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -23,10 +25,19 @@ import {
 import { Button } from '@/components/ui/button';
 import { invoke } from '@tauri-apps/api/core';
 import { useTerminalDrawerStore } from '@/store/useTerminalDrawerStore';
+import EditServerModal from './EditServerModal'; // ✅ Modal completo
+import ConfigureWakeOnLANModal from './ConfigureWakeOnLANModal'; // ✅ Modal WoL
 
 interface TerminalStatus {
   is_connected: boolean;
   message: string;
+}
+
+// ✅ AGGIUNTO: Interfaccia per risultati gestione energia
+interface PowerResult {
+  success: boolean;
+  message: string;
+  details?: string;
 }
 
 const ServerSidebar: React.FC = () => {
@@ -36,6 +47,15 @@ const ServerSidebar: React.FC = () => {
     is_connected: false, 
     message: "" 
   });
+  
+  // ✅ AGGIUNTO: Stati per gestione energia
+  const [isWaking, setIsWaking] = useState(false);
+  const [isShuttingDown, setIsShuttingDown] = useState(false);
+  
+  // ✅ AGGIUNTO: Modal separati
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showWoLModal, setShowWoLModal] = useState(false);
+  
   const { open, connect, setConnected } = useTerminalDrawerStore();
 
   useEffect(() => {
@@ -64,15 +84,99 @@ const ServerSidebar: React.FC = () => {
     toggleServerStatus(selectedServer.id);
   };
 
-  // ✅ NUOVA LOGICA: Più intelligente e veloce
+  // ✅ AGGIUNTO: Wake-on-LAN - Accendi server
+  const handleWakeOnLAN = async () => {
+    if (!selectedServer.macAddress) {
+      // ✅ Apri modal specifico per configurare WoL
+      setShowWoLModal(true);
+      return;
+    }
+
+    setIsWaking(true);
+    try {
+      console.log("🔌 Invio Wake-on-LAN a:", selectedServer.macAddress);
+      
+      const result = await invoke<PowerResult>('wake_server', {
+        macAddress: selectedServer.macAddress,
+        broadcastIp: null, // Usa broadcast automatico
+      });
+
+      if (result.success) {
+        toast.success("✅ " + result.message, {
+          description: result.details || "Il server dovrebbe accendersi in 10-60 secondi",
+        });
+        console.log("✅ Wake-on-LAN inviato con successo");
+      } else {
+        toast.error("❌ " + result.message, {
+          description: result.details,
+        });
+      }
+    } catch (error) {
+      console.error("❌ Errore Wake-on-LAN:", error);
+      toast.error("❌ Errore durante Wake-on-LAN", {
+        description: String(error),
+      });
+    } finally {
+      setIsWaking(false);
+    }
+  };
+
+  // ✅ AGGIUNTO: Shutdown server - Spegni server
+  const handleShutdownServer = async () => {
+    if (!isReallyOnline) {
+      toast.error("❌ Server offline", {
+        description: "Il server deve essere online per essere spento via SSH"
+      });
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Sei sicuro di voler spegnere il server "${selectedServer.name}"?\n\n` +
+      `Questo comando spegnerà fisicamente il server tramite SSH.`
+    );
+    
+    if (!confirmed) return;
+
+    setIsShuttingDown(true);
+    try {
+      console.log("🛑 Spegnimento server:", selectedServer.name);
+      
+      const result = await invoke<PowerResult>('shutdown_server', {
+        ip: selectedServer.ip,
+        sshUser: selectedServer.sshUser,
+        sshPort: selectedServer.sshPort,
+        password: selectedServer.password || null,
+        customCommand: selectedServer.shutdownCommand || null,
+      });
+
+      if (result.success) {
+        toast.success("✅ " + result.message, {
+          description: result.details || "Il server si sta spegnendo...",
+        });
+        console.log("✅ Comando spegnimento inviato con successo");
+      } else {
+        toast.warning("⚠️ " + result.message, {
+          description: result.details,
+        });
+      }
+    } catch (error) {
+      console.error("❌ Errore spegnimento:", error);
+      toast.error("❌ Errore durante lo spegnimento", {
+        description: String(error),
+      });
+    } finally {
+      setIsShuttingDown(false);
+    }
+  };
+
+  // ✅ ESISTENTE: Logica terminal (invariata)
   const waitForTerminalReady = async (maxAttempts = 15): Promise<boolean> => {
     console.log("⏳ Verificando disponibilità ttyd...");
     
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        // ✅ Usa fetch con timeout più corto
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 1000); // 1 secondo per tentativo
+        const timeoutId = setTimeout(() => controller.abort(), 1000);
         
         await fetch('http://localhost:7681', { 
           method: 'HEAD',
@@ -83,9 +187,8 @@ const ServerSidebar: React.FC = () => {
         clearTimeout(timeoutId);
         console.log(`✅ Tentativo ${attempt}: ttyd disponibile`);
         
-        // ✅ Attesa minima solo per i primi tentativi
         if (attempt <= 3) {
-          await new Promise(resolve => setTimeout(resolve, 200)); // Solo 200ms
+          await new Promise(resolve => setTimeout(resolve, 200));
         }
         
         return true;
@@ -93,41 +196,36 @@ const ServerSidebar: React.FC = () => {
         console.log(`⏳ Tentativo ${attempt}/${maxAttempts}: ttyd non disponibile`);
         
         if (attempt < maxAttempts) {
-          // ✅ Attesa progressiva ma più veloce
-          const waitTime = Math.min(attempt * 200, 1000); // Max 1 secondo
+          const waitTime = Math.min(attempt * 200, 1000);
           await new Promise(resolve => setTimeout(resolve, waitTime));
         }
       }
     }
     
     console.warn("⚠️ ttyd non disponibile, procedo comunque");
-    return false; // ✅ Non è un errore, procediamo
+    return false;
   };
 
   const handleOpenTerminal = async () => {
     if (!selectedServer) return;
 
-    // ✅ SE GIÀ CONNESSO: Solo riapri drawer, NESSUN caricamento
     if (terminalStatus.is_connected) {
       open();
       toast.success("📺 Terminale riaperto");
       console.log("🔄 Drawer riaperto - connessione già attiva");
-      return; // ✅ ESCE SUBITO, niente loading
+      return;
     }
 
-    // ✅ SOLO per NUOVE connessioni
     setIsConnecting(true);
     
     try {
       console.log("🔌 Avvio nuova connessione SSH...");
       
-      // ✅ Step 1: Mostra toast di caricamento
       toast.loading("🔌 Connessione SSH in corso...", { 
         id: "ssh-connection",
         duration: Infinity 
       });
 
-      // ✅ Step 2: Avvia SSH
       const result = await invoke<TerminalStatus>('open_terminal', {
         request: {
           sshUser: selectedServer.sshUser,
@@ -141,23 +239,19 @@ const ServerSidebar: React.FC = () => {
       setTerminalStatus(result);
       setConnected(result.is_connected);
 
-      // ✅ Step 3: Aggiorna toast - SSH fatto, ora verifica ttyd
       toast.loading("📺 Preparazione interfaccia terminale...", { 
         id: "ssh-connection"
       });
 
-      // ✅ Step 4: Verifica ttyd rapidamente (max 3 secondi)
-      const isReady = await waitForTerminalReady(15); // 15 tentativi = ~3 secondi
+      const isReady = await waitForTerminalReady(15);
       
-      // ✅ Step 5: Apri drawer sempre - ready o no
-      sessionStorage.setItem('terminal-reconnecting', 'true'); // ✅ Flag per nuova connessione
+      sessionStorage.setItem('terminal-reconnecting', 'true');
       connect();
       
       if (isReady) {
         toast.success("✅ " + result.message, { id: "ssh-connection" });
         console.log("🎉 Terminale pronto");
       } else {
-        // ✅ Non è un errore, solo un avviso
         toast.success("✅ SSH connesso - terminale in caricamento", { 
           id: "ssh-connection",
           description: "L'interfaccia potrebbe impiegare qualche secondo extra"
@@ -236,31 +330,74 @@ const ServerSidebar: React.FC = () => {
         <div>Type: <span className="text-foreground">{selectedServer.type}</span></div>
         <div>User: <span className="text-foreground">{selectedServer.sshUser}</span></div>
         <div>Port: <span className="text-foreground">{selectedServer.sshPort}</span></div>
+        
+        {/* ✅ AGGIUNTO: Mostra MAC address se presente */}
+        {selectedServer.macAddress && (
+          <div>MAC: <span className="text-foreground">{selectedServer.macAddress}</span></div>
+        )}
       </div>
 
       <div className="border-t border-border my-2" />
-      <h4 className="text-sm font-medium mb-2">Commands</h4>
+      <h4 className="text-sm font-medium mb-2">Power Management</h4>
 
+      {/* ✅ AGGIUNTO: Wake-on-LAN Button */}
+      <button 
+        className={`sidebar-command ${
+          isWaking 
+            ? 'opacity-50 cursor-not-allowed' 
+            : !selectedServer.macAddress
+              ? 'opacity-75 hover:bg-yellow-50 hover:text-yellow-700 dark:hover:bg-yellow-900/20'
+              : 'hover:bg-green-50 hover:text-green-700 dark:hover:bg-green-900/20'
+        }`}
+        onClick={selectedServer.macAddress ? handleWakeOnLAN : () => setShowWoLModal(true)}
+        disabled={isWaking}
+        title={!selectedServer.macAddress ? 'Clicca per configurare Wake-on-LAN' : 'Accendi server via Wake-on-LAN'}
+      >
+        <Zap className={`h-4 w-4 ${isWaking ? 'animate-pulse text-green-500' : !selectedServer.macAddress ? 'text-yellow-500' : ''}`} />
+        <span>
+          {isWaking 
+            ? 'Accendendo...' 
+            : !selectedServer.macAddress 
+              ? 'Wake On LAN (Configura)' 
+              : 'Wake On LAN'
+          }
+        </span>
+      </button>
+
+      {/* ✅ MODIFICATO: Shutdown con funzionalità reale */}
+      <button 
+        className={`sidebar-command ${
+          !isReallyOnline || isShuttingDown 
+            ? 'opacity-50 cursor-not-allowed' 
+            : 'hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-900/20'
+        }`}
+        onClick={handleShutdownServer}
+        disabled={!isReallyOnline || isShuttingDown}
+        title={!isReallyOnline ? 'Server offline - impossibile spegnere' : 'Spegni server via SSH'}
+      >
+        <Power className={`h-4 w-4 ${isShuttingDown ? 'animate-pulse text-red-500' : ''}`} />
+        <span>{isShuttingDown ? 'Spegnendo...' : 'Shutdown Server'}</span>
+      </button>
+
+      <div className="border-t border-border my-2" />
+      <h4 className="text-sm font-medium mb-2">Actions</h4>
+
+      {/* ✅ ESISTENTE: Toggle status locale */}
       <button className="sidebar-command" onClick={handleStatusToggle}>
         {selectedServer.status === 'online' ? (
           <>
             <StopCircle className="h-4 w-4" />
-            <span>Shutdown Server</span>
+            <span>Mark Offline</span>
           </>
         ) : (
           <>
             <Play className="h-4 w-4" />
-            <span>Start Server</span>
+            <span>Mark Online</span>
           </>
         )}
       </button>
 
-      <button className="sidebar-command">
-        <Power className="h-4 w-4" />
-        <span>Wake On LAN</span>
-      </button>
-
-      {/* ✅ BOTTONE MIGLIORATO */}
+      {/* ✅ ESISTENTE: Terminal button */}
       <button
         className={`sidebar-command mt-4 ${
           isReallyOnline
@@ -285,9 +422,17 @@ const ServerSidebar: React.FC = () => {
         </span>
       </button>
 
-      <button className="sidebar-command mt-4">
+      <button 
+        className="sidebar-command mt-4"
+        onClick={() => setShowEditModal(true)}
+      >
+        <Edit className="h-4 w-4" />
+        <span>Edit Server</span>
+      </button>
+
+      <button className="sidebar-command">
         <Settings className="h-4 w-4" />
-        <span>Server Settings</span>
+        <span>Advanced Settings</span>
       </button>
 
       <Dialog>
@@ -313,6 +458,20 @@ const ServerSidebar: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ✅ AGGIUNTO: Modal completo di modifica server */}
+      <EditServerModal
+        server={selectedServer}
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+      />
+
+      {/* ✅ AGGIUNTO: Modal specifico per configurare Wake-on-LAN */}
+      <ConfigureWakeOnLANModal
+        server={selectedServer}
+        isOpen={showWoLModal}
+        onClose={() => setShowWoLModal(false)}
+      />
     </div>
   );
 };
